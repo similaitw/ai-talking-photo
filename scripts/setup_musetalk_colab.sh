@@ -5,14 +5,26 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="$ROOT/.venv-musetalk"
 MUSETALK="$ROOT/vendor/MuseTalk"
 REVISION="0a89dec45a0192b824e3cf4daf96c239440c5ed8"
+LOG_DIR="$ROOT/temp"
+LOG="$LOG_DIR/musetalk_setup.log"
 CURRENT_STEP="初始化"
+
+mkdir -p "$LOG_DIR"
+: > "$LOG"
+exec > >(tee -a "$LOG") 2>&1
 
 on_error() {
   local status=$?
+  trap - ERR
+  set +e
   printf '\nMuseTalk 設定失敗。\n' >&2
   printf '失敗步驟：%s\n' "$CURRENT_STEP" >&2
   printf '失敗指令：%s\n' "$BASH_COMMAND" >&2
   printf '結束代碼：%s\n' "$status" >&2
+  printf '完整 log：%s\n' "$LOG" >&2
+  printf '\n===== MuseTalk setup 最後 120 行 =====\n' >&2
+  tail -n 120 "$LOG" >&2 || true
+  printf '===== log 結束 =====\n' >&2
   exit "$status"
 }
 trap on_error ERR
@@ -46,9 +58,10 @@ fi
 PY="$VENV/bin/python"
 
 step "準備相容的 Python 打包工具"
-# MMCV 2.0.1 的 setup.py 仍依賴 pkg_resources；setuptools 82 已移除它。
-# 固定 <82，避免 2026 年新版 setuptools 造成安裝失敗。
-"$PY" -m pip install --upgrade pip "setuptools<82" wheel
+# OpenMIM 對 pip >= 24.1 有已知相容問題；MMCV 2.0.1 的 setup.py 也仍依賴
+# pkg_resources。固定舊而穩定的 pip / setuptools，避免 2026 年新版工具鏈
+# 破壞 MuseTalk 官方這組 2023-era OpenMMLab 相依。
+"$PY" -m pip install "pip==24.0" "setuptools==69.5.1" wheel
 "$PY" - <<'PY'
 import pip
 import setuptools
@@ -73,7 +86,10 @@ step "安裝 MuseTalk 專用 PyTorch 2.0.1 + CUDA 11.8"
 
 step "安裝 MuseTalk 官方相依套件"
 "$PY" -m pip install -r "$MUSETALK/requirements.txt"
-"$PY" -m pip install --upgrade openmim
+# openmim 依賴 pip 的內部行為；安裝前後都重新鎖回已驗證版本，避免它或
+# 其他依賴把 pip / setuptools 升級到不相容的新版本。
+"$PY" -m pip install openmim
+"$PY" -m pip install "pip==24.0" "setuptools==69.5.1"
 "$PY" -m mim install mmengine
 "$PY" -m mim install "mmcv==2.0.1"
 "$PY" -m mim install "mmdet==3.1.0"
@@ -99,6 +115,7 @@ cat <<EOF
 MuseTalk 1.5 高品質 backend 設定完成。
 MuseTalk checkout: $REVISION
 專用 Python: $PY
+設定 log: $LOG
 
 請用主程式的 Python 啟動 app.py，並在「嘴型引擎」選擇：
 MuseTalk 1.5（高品質／建議 Colab）
