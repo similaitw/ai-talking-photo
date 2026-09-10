@@ -10,6 +10,7 @@ $OutputEncoding = [Console]::OutputEncoding
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvDir = Join-Path $ProjectRoot ".venv-gfpgan"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
+$MainVenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $GFPGANDir = Join-Path $ProjectRoot "vendor\GFPGAN"
 $GFPGANRevision = "7552a7791caad982045a7bbe5634bbf1cd5c8679"
 $ModelDir = Join-Path $GFPGANDir "gfpgan\weights"
@@ -118,11 +119,14 @@ try {
     Write-Host "AI Talking Photo — GFPGAN 高清修復設定" -ForegroundColor Green
     Write-Host "專案位置：$ProjectRoot"
 
-    Write-Step "檢查 Git、Python 3.11 與 FFmpeg"
+    Write-Step "檢查 Git、Python 3.11、主環境與 FFmpeg"
     $Git = Get-CommandPath "git.exe"
     if ($null -eq $Git) { $Git = Get-CommandPath "git" }
     if ($null -eq $Git) { throw "找不到 Git。請先安裝 Git for Windows。" }
     $PythonLauncher = Resolve-Python311
+    if (-not (Test-Path $MainVenvPython)) {
+        throw "找不到主 .venv。請先執行 scripts/setup_windows.ps1 完成 Wav2Lip 主環境設定。"
+    }
     $FFmpeg = Get-CommandPath "ffmpeg.exe"
     if ($null -eq $FFmpeg) { $FFmpeg = Get-CommandPath "ffmpeg" }
     if ($null -eq $FFmpeg) { throw "找不到 FFmpeg。請先安裝 FFmpeg 並加入 PATH。" }
@@ -171,6 +175,9 @@ try {
     Write-Step "驗證 GFPGAN 執行環境"
     $Info = Invoke-NativeOutput $VenvPython @("-c", "import torch, gfpgan; print(f'PyTorch {torch.__version__} | CUDA available {torch.cuda.is_available()} | GFPGAN import OK')") "GFPGAN 環境驗證失敗"
     Write-Host $Info
+
+    Write-Step "重新套用 Wav2Lip 相容性與嘴周柔和融合修正"
+    Invoke-Native $MainVenvPython @((Join-Path $ProjectRoot "scripts\prepare_wav2lip.py")) "Wav2Lip 品質修正準備失敗"
 
     Write-Host "`nGFPGAN 高清修復設定完成。" -ForegroundColor Green
     Write-Host "請用原本 .venv 啟動 app.py；主程式會自動呼叫 .venv-gfpgan。"
