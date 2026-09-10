@@ -2,7 +2,7 @@
 
 ## Current task
 
-M3.2 — Doctor
+M4.1 — Wav2Lip Wrapper
 
 ## Milestones
 
@@ -13,7 +13,7 @@ M3.2 — Doctor
 - [x] M2.1 Edge TTS
 - [x] M2.2 Audio Preview
 - [x] M3.1 FFmpeg Audio Normalize
-- [ ] M3.2 Doctor
+- [x] M3.2 Doctor
 - [ ] M4.1 Wav2Lip Wrapper
 - [ ] M4.2 End-to-End Talking Photo
 - [ ] M5.1 Colab Notebook
@@ -68,3 +68,11 @@ M3.2 — Doctor
 - Added 14 media tests covering invalid paths, unavailable FFmpeg, failed/invalid output, real WAV/MP3 conversion, and corrupt input. Real FFmpeg tests skip with an explicit reason when FFmpeg is unavailable.
 - Documented the FFmpeg prerequisite and standalone API in README; pipeline integration remains in its planned milestone.
 - Verified `python -m pytest` on Windows with FFmpeg installed: 43 passed, no skipped tests.
+
+### M3.2 — Doctor
+- 新增 `scripts/doctor.py`，以繁體中文檢查 Python、PyTorch、CUDA、GPU／顯示記憶體、FFmpeg、edge-tts 與模型檔，並提供建議模式。
+- 實作延遲載入 PyTorch 的 `get_device_info()`；CPU 與不超過 2.5 GiB 的 GPU 優先建議 Colab，較大容量 GPU 可使用本機 CUDA。
+- 支援自訂模型路徑、缺項後繼續診斷、結束代碼與 Windows UTF-8 輸出；不下載或載入權重、不執行推論或網路語音請求。
+- README 補充使用方式、預設模型路徑、硬體建議與基本檢查的限制。
+- 新增 17 項測試，涵蓋 CPU、2GB／2.5GB／12GB GPU、PyTorch／CUDA 錯誤、FFmpeg 失敗與逾時、模型缺漏及跨工作目錄執行。
+- 完整測試 `python -m pytest`：60 passed，無略過；實機診斷正確回報目前缺少 PyTorch 與模型檔，FFmpeg 與 edge-tts 可使用。
