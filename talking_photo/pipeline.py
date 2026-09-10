@@ -14,6 +14,7 @@ from PIL import Image, ImageOps
 from talking_photo.config import TEMP_DIR, OUTPUT_DIR
 from talking_photo.device import get_device_info
 from talking_photo.media import normalize_audio
+from talking_photo.quality import detect_face_box, limit_low_vram_output
 from talking_photo.tts import synthesize_speech, resolve_voice, format_edge_rate
 from talking_photo.validation import validate_inputs
 from talking_photo.wav2lip import generate_lip_sync
@@ -24,12 +25,13 @@ class PipelineError(RuntimeError):
 
 
 def finalize_video(source: Path, destination: Path) -> None:
-    """Encode browser-compatible H.264/AAC MP4 before publishing the result."""
+    """Encode browser-compatible H.264/AAC MP4 with low visible recompression loss."""
     try:
         subprocess.run(
             ["ffmpeg", "-nostdin", "-y", "-i", str(source),
              "-map", "0:v:0", "-map", "0:a:0", "-c:v", "libx264",
-             "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+             "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
+             "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
              "-c:a", "aac", "-movflags", "+faststart", str(destination)],
             check=True, capture_output=True,
         )
@@ -46,10 +48,13 @@ def generate_talking_video(
     rate: float,
     progress_callback: Callable[[float, str], None] | None = None,
 ) -> dict:
-    """Return job_id, audio_path, video_path, device, gpu_name and low_vram.
+    """Return paths and runtime metadata for one talking-photo job.
 
-    Successful jobs retain only preview MP3 and final MP4. Failed jobs are removed.
-    TALKING_PHOTO_DEVICE=cpu explicitly selects CPU; CUDA errors never retry on CPU.
+    Low-VRAM CUDA first keeps the portrait up to 1280 px and detects a face on a
+    512 px CPU preview. When that succeeds, the mapped fixed box avoids GPU face
+    detection on the large frame and enables lower-face soft blending. If the
+    preview detector cannot find a face, the pipeline falls back to the proven
+    512 px compatibility path instead of risking a GTX 1050 OOM.
     """
     def report(value: float, message: str) -> None:
         if progress_callback is not None:
@@ -71,31 +76,70 @@ def generate_talking_video(
     job_id = uuid4().hex
     job = TEMP_DIR / job_id
     destination = OUTPUT_DIR / f"{job_id}.mp4"
+    face_box: tuple[int, int, int, int] | None = None
+    quality_mode = "標準模式"
+    source_size: tuple[int, int] | None = None
+    prepared_size: tuple[int, int] | None = None
     try:
         job.mkdir(parents=True)
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         prepared = job / "input.png"
-        with Image.open(image) as portrait:
-            portrait = ImageOps.exif_transpose(portrait).convert("RGB")
+        with Image.open(image) as opened:
+            portrait = ImageOps.exif_transpose(opened).convert("RGB")
+            source_size = portrait.size
             if low_vram:
-                portrait.thumbnail((512, 512))
-            portrait.save(prepared)
-        mode = "CPU 備援，可能需要較長時間" if device == "cpu" else "CUDA 低顯示記憶體模式" if low_vram else "CUDA"
+                portrait = limit_low_vram_output(portrait)
+                face_box = detect_face_box(portrait)
+                if face_box is not None:
+                    quality_mode = "低顯示記憶體清晰模式"
+                else:
+                    portrait.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                    quality_mode = "低顯示記憶體相容模式"
+            prepared_size = portrait.size
+            portrait.save(prepared, compress_level=2)
+
+        if device == "cpu":
+            mode = f"CPU 備援／{quality_mode}，可能需要較長時間"
+        elif low_vram:
+            mode = f"CUDA／{quality_mode}"
+        else:
+            mode = "CUDA／標準模式"
         report(0.1, f"正在產生台灣中文語音；推論將使用 {mode}。")
         audio = synthesize_speech(script, voice, rate, str(job / "speech.mp3"))
         report(0.3, "正在轉換為 16 kHz 單聲道 PCM WAV。")
         wav = normalize_audio(audio, str(job / "speech.wav"))
-        report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
-        raw = generate_lip_sync(str(prepared), wav, str(job / "raw.mp4"), device, low_vram=low_vram)
-        report(0.9, "正在封裝可播放的 MP4。")
+        if face_box is not None:
+            report(0.45, "已用低解析度預覽定位人臉；正在以較高解析度原圖產生並柔和融合嘴型。")
+        else:
+            report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
+        raw = generate_lip_sync(
+            str(prepared),
+            wav,
+            str(job / "raw.mp4"),
+            device,
+            low_vram=low_vram,
+            face_box=face_box,
+            soft_blend=bool(low_vram and face_box is not None),
+        )
+        report(0.9, "正在以高品質 H.264 封裝可播放的 MP4。")
         final = job / "final.mp4"
         finalize_video(Path(raw), final)
         os.replace(final, destination)
         for intermediate in (prepared, job / "speech.wav", job / "raw.mp4"):
             intermediate.unlink(missing_ok=True)
-        report(1, "影片已產生，可播放語音與影片。")
-        return dict(job_id=job_id, audio_path=audio, video_path=str(destination),
-                    device=device, gpu_name=info.gpu_name, low_vram=low_vram)
+        report(1, f"影片已產生（{quality_mode}），可播放語音與影片。")
+        return dict(
+            job_id=job_id,
+            audio_path=audio,
+            video_path=str(destination),
+            device=device,
+            gpu_name=info.gpu_name,
+            low_vram=low_vram,
+            quality_mode=quality_mode,
+            source_size=source_size,
+            prepared_size=prepared_size,
+            face_box=face_box,
+        )
     except BaseException:
         # Only remove paths created for this UUID job, never user inputs.
         shutil.rmtree(job, ignore_errors=True)
