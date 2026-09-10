@@ -2,7 +2,7 @@
 
 ## Current task
 
-M2.1 — Edge TTS
+M2.2 — Audio Preview
 
 ## Milestones
 
@@ -10,7 +10,7 @@ M2.1 — Edge TTS
 - [x] M0.2 Agent / Spec / Tasks
 - [x] M1.1 Gradio Shell
 - [x] M1.2 Validation
-- [ ] M2.1 Edge TTS
+- [x] M2.1 Edge TTS
 - [ ] M2.2 Audio Preview
 - [ ] M3.1 FFmpeg Audio Normalize
 - [ ] M3.2 Doctor
@@ -45,3 +45,10 @@ M2.1 — Edge TTS
 - Added script normalization for line endings, whitespace, and Markdown bold markers.
 - Connected validation to the Gradio generate action before pipeline execution.
 - Verified `python -m pytest`: 15 passed.
+
+### M2.1 — Edge TTS
+- Added Taiwan Mandarin Edge TTS voice mapping for female and male voices.
+- Added 0.8–1.2 speed multiplier conversion to Edge TTS rate syntax.
+- Added script normalization, output directory creation, output verification, and user-friendly TTS errors.
+- Kept `edge-tts` as a lazy runtime dependency so unit tests do not require network access.
+- Verified `python -m pytest`: 26 passed.
