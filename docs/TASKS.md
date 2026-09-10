@@ -2,7 +2,7 @@
 
 ## Current task
 
-M6.3 — Wav2Lip + GFPGAN HD Post-processing
+M6.4 — MuseTalk 1.5 High Quality Backend
 
 ## Milestones
 
@@ -20,7 +20,7 @@ M6.3 — Wav2Lip + GFPGAN HD Post-processing
 - [x] M5.2 Colab Documentation
 - [x] M6.1 Windows Setup
 - [x] M6.2 GTX 1050 Low VRAM
-- [ ] M6.3 Wav2Lip + GFPGAN HD Post-processing
+- [x] M6.3 Wav2Lip + GFPGAN HD Post-processing
 - [ ] M6.4 MuseTalk 1.5 High Quality Backend
 - [ ] M7 UX Polish
 
@@ -133,3 +133,11 @@ M6.3 — Wav2Lip + GFPGAN HD Post-processing
 - GitHub Actions：106 passed、3 skipped。
 - Windows GTX 1050 2GB 實機可成功產生影片；清晰度路徑已改善原先整體模糊問題，但同一張人物照片實測嘴型仍明顯不自然。
 - 結論：2GB 顯存與 Wav2Lip 路線保留為「快速／低顯存」模式；M6.3 先測 GFPGAN 作為高清後處理，若嘴型自然度仍不足，M6.4 再切換 MuseTalk 1.5 高品質 backend。
+
+### M6.3 — Wav2Lip + GFPGAN HD Post-processing
+- 新增可選 GFPGAN V1.3 人臉修復後處理：Wav2Lip 完成後拆幀、以 1× 中心人臉修復逐幀處理，再保留原音訊重新封裝 H.264／AAC MP4。
+- GFPGAN 使用獨立 `.venv-gfpgan` 與官方 `TencentARC/GFPGAN` checkout，避免污染既有 Wav2Lip Python 環境；GTX 1050 2GB 預設不啟用 Real-ESRGAN 背景放大。
+- Gradio 新增「畫質後處理」選項，可在原始 Wav2Lip 與「GFPGAN 高清修復（實驗）」間 A/B 測試；不選 GFPGAN 時既有流程不變。
+- 修正 Windows PowerShell 5.1 的 UTF-8 BOM 與 native stderr `UserWarning` 相容性，並讓 GFPGAN setup 自動重新套用 Wav2Lip 嘴周柔和融合 patch。
+- GitHub Actions：123 passed、3 skipped。
+- Windows GTX 1050 2GB 實機已完成 GFPGAN 安裝、權重驗證與端到端影片產生；GFPGAN 定位為清晰度後處理，不視為重新計算或保證改善唇形同步。
