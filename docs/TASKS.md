@@ -2,7 +2,7 @@
 
 ## Current task
 
-M6.4 — MuseTalk 1.5 High Quality Backend
+M6.4 — Photo / Video Input + MuseTalk 1.5 High Quality Backend
 
 ## Milestones
 
@@ -21,7 +21,7 @@ M6.4 — MuseTalk 1.5 High Quality Backend
 - [x] M6.1 Windows Setup
 - [x] M6.2 GTX 1050 Low VRAM
 - [x] M6.3 Wav2Lip + GFPGAN HD Post-processing
-- [ ] M6.4 MuseTalk 1.5 High Quality Backend
+- [ ] M6.4 Photo / Video Input + MuseTalk 1.5 High Quality Backend
 - [ ] M7 UX Polish
 
 ## Completed
@@ -144,12 +144,16 @@ M6.4 — MuseTalk 1.5 High Quality Backend
 
 ## In progress
 
-### M6.4 — MuseTalk 1.5 High Quality Backend
+### M6.4 — Photo / Video Input + MuseTalk 1.5 High Quality Backend
 - 已新增 `talking_photo/musetalk.py`，固定官方 MuseTalk commit `0a89dec45a0192b824e3cf4daf96c239440c5ed8`，以外部 checkout + 獨立 `.venv-musetalk` 執行 v1.5 normal inference。
-- Gradio 已新增「嘴型引擎」切換；Wav2Lip / GFPGAN 既有路徑維持相容，MuseTalk 模式不呼叫 Wav2Lip。
+- Gradio 已新增「嘴型引擎」切換與「人物素材（照片或影片）」上傳；Wav2Lip / GFPGAN 既有照片路徑維持相容，MuseTalk 模式不呼叫 Wav2Lip。
+- 圖片支援 JPG / JPEG / PNG / WebP；影片支援 MP4 / MOV / WebM / MKV，並以 FFprobe 驗證第一視訊軌尺寸。
+- Wav2Lip 影片模式不傳 `--static`，保留來源逐幀眨眼、頭部與身體動作；不套用照片專用固定 face box / soft blend。若 TTS 較長，沿用官方循環來源幀行為。
+- MuseTalk 影片模式保留來源副檔名交給官方 inference，讀取來源 FPS；若 TTS 較長，沿用官方 `frame_list + frame_list[::-1]` 幀循環。原影片聲音由新 Edge TTS 取代。
 - MuseTalk 本專案門檻為 CUDA + 至少 4GB VRAM；GTX 1050 2GB 會在 TTS / 推論前停止並提示改用 Google Colab，不會靜默改用 CPU。
-- 預設 MuseTalk v1.5、fp16、25fps、batch size 4，人物照片最長邊 1280 px；wrapper 會額外驗證真實 MP4，避免官方 task 內部 catch 例外後出現假成功。
+- 預設 MuseTalk v1.5、fp16、batch size 4；照片模式 25fps 且最長邊 1280 px，影片模式使用來源影片 FPS；wrapper 會額外驗證真實 MP4，避免官方 task 內部 catch 例外後出現假成功。
 - 新增 `scripts/setup_musetalk_colab.sh`、`scripts/download_musetalk_models.py` 與專用 `notebooks/AI_Talking_Photo_MuseTalk_Colab.ipynb`；MuseTalk 使用 Python 3.10 / PyTorch 2.0.1 + CUDA 11.8，主 UI / TTS 使用獨立 Python 3.11。
-- README 與 `docs/MUSETALK.md` 已補上 A/B 測試、硬體、Colab、模型、授權與隱私說明。
-- 程式與 setup 第一輪 GitHub Actions：142 passed、3 skipped；完整文件 / notebook 最終 CI 驗證中。
-- **尚未完成的 acceptance criterion：必須在真正 Google Colab GPU 使用專用 notebook 產出至少一支 MuseTalk 1.5 MP4。完成前不得勾選 M6.4。**
+- MuseTalk setup 為 OpenMIM / MMCV 相容性固定 `pip==24.0`、`setuptools==69.5.1`，失敗時保留 `temp/musetalk_setup.log` 並由 notebook 顯示最後 120 行。
+- README、SPEC、MuseTalk 文件與專用 notebook 已改為照片／影片雙輸入；第一次高品質 A/B 優先使用同一支 5～10 秒自然待機人物影片，GFPGAN 關閉。
+- GitHub Actions 在影片路由核心版已達 **162 passed、3 skipped**；Wav2Lip `static=False`、MuseTalk 影片副檔名保留、雙 backend 路由皆有專用測試。
+- **尚未完成的 acceptance criterion：必須在真正 Google Colab GPU 使用專用 notebook，以影片輸入產出至少一支 MuseTalk 1.5 MP4。完成前不得勾選 M6.4。**
