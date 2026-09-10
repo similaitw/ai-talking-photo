@@ -2,7 +2,7 @@
 
 ## Current task
 
-M3.1 — FFmpeg Audio Normalize
+M3.2 — Doctor
 
 ## Milestones
 
@@ -12,7 +12,7 @@ M3.1 — FFmpeg Audio Normalize
 - [x] M1.2 Validation
 - [x] M2.1 Edge TTS
 - [x] M2.2 Audio Preview
-- [ ] M3.1 FFmpeg Audio Normalize
+- [x] M3.1 FFmpeg Audio Normalize
 - [ ] M3.2 Doctor
 - [ ] M4.1 Wav2Lip Wrapper
 - [ ] M4.2 End-to-End Talking Photo
@@ -60,3 +60,11 @@ M3.1 — FFmpeg Audio Normalize
 - Kept the video-generation action separate and explicitly unavailable until the video pipeline milestone.
 - Added user-facing validation and TTS failure messages.
 - Verified `python -m pytest`: 29 passed.
+
+### M3.1 — FFmpeg Audio Normalize
+- Added `normalize_audio(input_path, output_path)` using real FFmpeg subprocess execution to produce 16 kHz mono signed 16-bit PCM WAV.
+- Added input/output validation, automatic output directory creation, absolute output paths, and Traditional Chinese conversion errors.
+- Verify WAV output before replacing the destination; failed conversions preserve existing output and clean temporary files.
+- Added 14 media tests covering invalid paths, unavailable FFmpeg, failed/invalid output, real WAV/MP3 conversion, and corrupt input. Real FFmpeg tests skip with an explicit reason when FFmpeg is unavailable.
+- Documented the FFmpeg prerequisite and standalone API in README; pipeline integration remains in its planned milestone.
+- Verified `python -m pytest` on Windows with FFmpeg installed: 43 passed, no skipped tests.
