@@ -10,7 +10,12 @@ from app import (
     generate_audio_preview,
     generate_video,
 )
-from talking_photo.pipeline import ENHANCEMENT_GFPGAN, ENHANCEMENT_NONE
+from talking_photo.pipeline import (
+    BACKEND_MUSETALK,
+    BACKEND_WAV2LIP,
+    ENHANCEMENT_GFPGAN,
+    ENHANCEMENT_NONE,
+)
 from talking_photo.tts import TTSGenerationError
 
 
@@ -28,6 +33,7 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
         audio_path="speech.mp3",
         video_path="real.mp4",
         device="cuda:0",
+        backend=BACKEND_WAV2LIP,
         quality_mode="低顯示記憶體清晰模式",
         enhancement_mode="未啟用",
     )
@@ -37,10 +43,12 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
     assert video == "real.mp4"
     assert VIDEO_READY in status
     assert "CUDA" in status
+    assert BACKEND_WAV2LIP in status
     assert "低顯示記憶體清晰模式" in status
     assert "未啟用" in status
     assert pipeline.call_args.args == (str(portrait), "測試", "台灣女聲", 0.95)
     assert pipeline.call_args.kwargs["enhancement"] == ENHANCEMENT_NONE
+    assert pipeline.call_args.kwargs["backend"] == BACKEND_WAV2LIP
 
 
 def test_video_passes_gfpgan_selection() -> None:
@@ -48,6 +56,7 @@ def test_video_passes_gfpgan_selection() -> None:
         audio_path="speech.mp3",
         video_path="enhanced.mp4",
         device="cuda:0",
+        backend=BACKEND_WAV2LIP,
         quality_mode="低顯示記憶體清晰模式",
         enhancement_mode="GFPGAN V1.3 高清修復",
     )
@@ -58,6 +67,27 @@ def test_video_passes_gfpgan_selection() -> None:
     assert video == "enhanced.mp4"
     assert "GFPGAN V1.3" in status
     assert pipeline.call_args.kwargs["enhancement"] == ENHANCEMENT_GFPGAN
+    assert pipeline.call_args.kwargs["backend"] == BACKEND_WAV2LIP
+
+
+def test_video_passes_musetalk_selection() -> None:
+    result = dict(
+        audio_path="speech.mp3",
+        video_path="musetalk.mp4",
+        device="cuda:0",
+        backend=BACKEND_MUSETALK,
+        quality_mode="MuseTalk 1.5 高品質模式",
+        enhancement_mode="未啟用",
+    )
+    with patch("app.generate_talking_video", return_value=result) as pipeline:
+        _, video, status = generate_video(
+            "portrait.png", "測試", "台灣女聲", 1,
+            ENHANCEMENT_NONE, BACKEND_MUSETALK,
+        )
+    assert video == "musetalk.mp4"
+    assert BACKEND_MUSETALK in status
+    assert "MuseTalk 1.5 高品質模式" in status
+    assert pipeline.call_args.kwargs["backend"] == BACKEND_MUSETALK
 
 
 def test_video_reports_oom_and_clears_stale_previews() -> None:
@@ -66,6 +96,20 @@ def test_video_reports_oom_and_clears_stale_previews() -> None:
         audio, video, status = generate_video("portrait.png", "測試", "台灣女聲", 1)
     assert audio is None and video is None
     assert "GTX 1050 2GB" in status and "Colab" in status
+
+
+def test_video_reports_musetalk_cuda_requirement() -> None:
+    from talking_photo.musetalk import MuseTalkError
+    with patch(
+        "app.generate_talking_video",
+        side_effect=MuseTalkError("MuseTalk 1.5 高品質模式需要 CUDA GPU，請使用 Google Colab GPU。"),
+    ):
+        audio, video, status = generate_video(
+            "portrait.png", "測試", "台灣女聲", 1,
+            ENHANCEMENT_NONE, BACKEND_MUSETALK,
+        )
+    assert audio is None and video is None
+    assert "MuseTalk 1.5" in status and "Colab" in status
 
 
 def test_audio_preview_does_not_require_portrait(tmp_path: Path) -> None:
@@ -122,7 +166,7 @@ def test_gradio_shell_contains_required_components() -> None:
 
     assert {"image", "textbox", "dropdown", "slider", "audio", "video"} <= component_types
     assert {
-        "人物照片", "講稿", "聲音", "語速", "畫質後處理", "語音預覽", "影片預覽"
+        "人物照片", "講稿", "聲音", "語速", "嘴型引擎", "畫質後處理", "語音預覽", "影片預覽"
     } <= labels
     assert {"產生語音預覽", "產生影片"} <= button_values
     video_event = next(fn for fn in demo.fns.values() if fn.fn == generate_video)
