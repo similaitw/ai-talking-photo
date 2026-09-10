@@ -72,6 +72,7 @@ def test_pipeline_order_unique_jobs_and_cleanup(stages):
     assert first["job_id"] != second["job_id"]
     assert first["device"] == "cuda:0" and first["low_vram"]
     assert first["quality_mode"] == "低顯示記憶體清晰模式"
+    assert first["enhancement_mode"] == "未啟用"
     assert first["source_size"] == (1024, 768)
     assert first["prepared_size"] == (1024, 768)
     assert first["face_box"] == (20, 700, 120, 900)
@@ -80,6 +81,35 @@ def test_pipeline_order_unique_jobs_and_cleanup(stages):
     assert image.is_file()
     assert [p[0] for p in progress] == sorted(p[0] for p in progress)
     assert progress[-1][0] == 1
+
+
+def test_gfpgan_runs_only_when_selected(stages, monkeypatch):
+    image, calls = stages
+
+    def enhance(source, output, **kwargs):
+        calls.append("gfpgan")
+        assert Path(source).read_bytes() == b"final"
+        assert kwargs == {"version": "1.3", "weight": 0.4}
+        Path(output).write_bytes(b"enhanced")
+        return output
+
+    monkeypatch.setattr(pipeline, "enhance_video_with_gfpgan", enhance)
+    result = pipeline.generate_talking_video(
+        str(image), "大家好。", "台灣女聲", 1,
+        enhancement=pipeline.ENHANCEMENT_GFPGAN,
+    )
+    assert calls == ["tts", "normalize", "infer", "finalize", "gfpgan"]
+    assert Path(result["video_path"]).read_bytes() == b"enhanced"
+    assert result["enhancement_mode"] == "GFPGAN V1.3 高清修復"
+
+
+def test_invalid_enhancement_fails_before_work(stages):
+    image, calls = stages
+    with pytest.raises(ValueError, match="畫質後處理"):
+        pipeline.generate_talking_video(
+            str(image), "大家好。", "台灣女聲", 1, enhancement="unknown"
+        )
+    assert calls == []
 
 
 def test_low_vram_caps_large_portrait_at_1280(tmp_path, monkeypatch):
