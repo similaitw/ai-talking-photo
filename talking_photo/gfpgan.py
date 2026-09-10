@@ -5,10 +5,11 @@ from __future__ import annotations
 from fractions import Fraction
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class GFPGANError(RuntimeError):
@@ -22,9 +23,10 @@ def _run(command: list[str], *, cwd: Path | None = None) -> subprocess.Completed
         raise GFPGANError("找不到 FFmpeg／ffprobe 或 GFPGAN 執行環境，請先完成 GFPGAN 設定。") from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
-        if "out of memory" in stderr.lower() or "cuda" in stderr.lower() and "memory" in stderr.lower():
+        lowered = stderr.lower()
+        if "out of memory" in lowered or ("cuda" in lowered and "memory" in lowered):
             raise GFPGANError(
-                "GFPGAN 顯示記憶體不足。GTX 1050 2GB 建議關閉背景放大、使用 1× 修復；若仍失敗請改用 Colab。"
+                "GFPGAN 顯示記憶體不足。GTX 1050 2GB 建議使用 1× 中心人臉修復；若仍失敗請改用 Colab。"
             ) from exc
         raise GFPGANError("GFPGAN 高清修復失敗，請檢查安裝、模型與 FFmpeg。") from exc
 
@@ -43,6 +45,19 @@ def _video_fps(video_path: Path) -> str:
     if value <= 0:
         raise GFPGANError("來源影片幀率無效。")
     return f"{float(value):.6f}".rstrip("0").rstrip(".")
+
+
+def _default_python() -> str:
+    configured = os.environ.get("GFPGAN_PYTHON")
+    if configured:
+        return configured
+    windows = PROJECT_ROOT / ".venv-gfpgan" / "Scripts" / "python.exe"
+    posix = PROJECT_ROOT / ".venv-gfpgan" / "bin" / "python"
+    if windows.is_file():
+        return str(windows)
+    if posix.is_file():
+        return str(posix)
+    return sys.executable
 
 
 def enhance_video_with_gfpgan(
@@ -73,7 +88,7 @@ def enhance_video_with_gfpgan(
         raise ValueError("GFPGAN 修復強度必須介於 0 到 1。")
 
     root = Path(
-        gfpgan_dir or os.environ.get("GFPGAN_DIR", "vendor/GFPGAN")
+        gfpgan_dir or os.environ.get("GFPGAN_DIR", str(PROJECT_ROOT / "vendor" / "GFPGAN"))
     ).expanduser().resolve()
     inference = root / "inference_gfpgan.py"
     if not inference.is_file():
@@ -81,61 +96,67 @@ def enhance_video_with_gfpgan(
             "找不到 GFPGAN。請先執行 scripts/setup_gfpgan.ps1，或設定 GFPGAN_DIR。"
         )
 
-    python = python_executable or os.environ.get("GFPGAN_PYTHON") or sys.executable
+    python = python_executable or _default_python()
+    if not Path(python).is_file() and python != sys.executable:
+        raise GFPGANError("找不到 GFPGAN Python 環境，請先執行 scripts/setup_gfpgan.ps1。")
+
     destination.parent.mkdir(parents=True, exist_ok=True)
     fps = _video_fps(source)
-
     temporary_output: Path | None = None
-    with tempfile.TemporaryDirectory(prefix="gfpgan-", dir=str(destination.parent)) as temp_name:
-        temp = Path(temp_name)
-        frames = temp / "frames"
-        restored = temp / "restored"
-        frames.mkdir()
+    try:
+        with tempfile.TemporaryDirectory(prefix="gfpgan-", dir=str(destination.parent)) as temp_name:
+            temp = Path(temp_name)
+            frames = temp / "frames"
+            restored = temp / "restored"
+            frames.mkdir()
 
-        _run([
-            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(source), "-map", "0:v:0", "-vsync", "0",
-            str(frames / "%08d.png"),
-        ])
-        if not any(frames.glob("*.png")):
-            raise GFPGANError("影片拆幀失敗，沒有可修復的畫面。")
+            _run([
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                "-i", str(source), "-map", "0:v:0", "-vsync", "0",
+                str(frames / "%08d.png"),
+            ])
+            if not any(frames.glob("*.png")):
+                raise GFPGANError("影片拆幀失敗，沒有可修復的畫面。")
 
-        _run([
-            python, str(inference),
-            "-i", str(frames),
-            "-o", str(restored),
-            "-v", version,
-            "-s", "1",
-            "--bg_upsampler", "none",
-            "--only_center_face",
-            "--ext", "png",
-            "-w", str(weight),
-        ], cwd=root)
+            _run([
+                python, str(inference),
+                "-i", str(frames),
+                "-o", str(restored),
+                "-v", version,
+                "-s", "1",
+                "--bg_upsampler", "none",
+                "--only_center_face",
+                "--ext", "png",
+                "-w", str(weight),
+            ], cwd=root)
 
-        restored_frames = restored / "restored_imgs"
-        if not restored_frames.is_dir() or not any(restored_frames.glob("*.png")):
-            raise GFPGANError("GFPGAN 完成後找不到修復影格。")
+            restored_frames = restored / "restored_imgs"
+            if not restored_frames.is_dir() or not any(restored_frames.glob("*.png")):
+                raise GFPGANError("GFPGAN 完成後找不到修復影格。")
 
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=f".{destination.stem}-", suffix=".mp4", dir=destination.parent
-        )
-        os.close(fd)
-        temporary_output = Path(tmp_name)
-        temporary_output.unlink(missing_ok=True)
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".{destination.stem}-", suffix=".mp4", dir=destination.parent
+            )
+            os.close(fd)
+            temporary_output = Path(tmp_name)
+            temporary_output.unlink(missing_ok=True)
 
-        _run([
-            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-            "-framerate", fps, "-i", str(restored_frames / "%08d.png"),
-            "-i", str(source),
-            "-map", "0:v:0", "-map", "1:a?",
-            "-c:v", "libx264", "-crf", "18", "-preset", "medium",
-            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-            "-shortest", "-movflags", "+faststart", str(temporary_output),
-        ])
+            _run([
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                "-framerate", fps, "-i", str(restored_frames / "%08d.png"),
+                "-i", str(source),
+                "-map", "0:v:0", "-map", "1:a?",
+                "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+                "-shortest", "-movflags", "+faststart", str(temporary_output),
+            ])
 
-        if not temporary_output.is_file() or temporary_output.stat().st_size == 0:
-            raise GFPGANError("GFPGAN 影片合成完成但輸出檔案無效。")
-        os.replace(temporary_output, destination)
-        temporary_output = None
+            if not temporary_output.is_file() or temporary_output.stat().st_size == 0:
+                raise GFPGANError("GFPGAN 影片合成完成但輸出檔案無效。")
+            os.replace(temporary_output, destination)
+            temporary_output = None
+    finally:
+        if temporary_output is not None:
+            temporary_output.unlink(missing_ok=True)
 
     return str(destination)
