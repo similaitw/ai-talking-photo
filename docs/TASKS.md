@@ -2,7 +2,7 @@
 
 ## Current task
 
-M2.2 — Audio Preview
+M3.1 — FFmpeg Audio Normalize
 
 ## Milestones
 
@@ -11,7 +11,7 @@ M2.2 — Audio Preview
 - [x] M1.1 Gradio Shell
 - [x] M1.2 Validation
 - [x] M2.1 Edge TTS
-- [ ] M2.2 Audio Preview
+- [x] M2.2 Audio Preview
 - [ ] M3.1 FFmpeg Audio Normalize
 - [ ] M3.2 Doctor
 - [ ] M4.1 Wav2Lip Wrapper
@@ -52,3 +52,11 @@ M2.2 — Audio Preview
 - Added script normalization, output directory creation, output verification, and user-friendly TTS errors.
 - Kept `edge-tts` as a lazy runtime dependency so unit tests do not require network access.
 - Verified `python -m pytest`: 26 passed.
+
+### M2.2 — Audio Preview
+- Added a dedicated `產生語音預覽` action to the Gradio UI.
+- Audio preview can be generated from script, voice, and rate without requiring a portrait first.
+- Generated preview audio is written to a unique temporary MP3 path and returned to `gr.Audio` for playback/download.
+- Kept the video-generation action separate and explicitly unavailable until the video pipeline milestone.
+- Added user-facing validation and TTS failure messages.
+- Verified `python -m pytest`: 29 passed.
