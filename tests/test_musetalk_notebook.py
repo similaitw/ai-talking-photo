@@ -34,6 +34,14 @@ def test_musetalk_notebook_run_all_bootstraps_isolated_environments() -> None:
     assert ".venv-musetalk" in text
 
 
+def test_musetalk_notebook_surfaces_setup_log_on_failure() -> None:
+    text = _text(_load())
+    assert "musetalk_setup.log" in text
+    assert "CalledProcessError" in text
+    assert "最後 120 行" in text
+    assert "RuntimeError" in text
+
+
 def test_musetalk_notebook_launches_share_ui_with_musetalk_default() -> None:
     text = _text(_load())
     assert "TALKING_PHOTO_DEFAULT_BACKEND" in text
