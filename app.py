@@ -1,13 +1,45 @@
-"""Gradio application shell for AI Talking Photo."""
+"""Gradio application for AI Talking Photo."""
 
 from __future__ import annotations
+
+from pathlib import Path
+from uuid import uuid4
 
 import gradio as gr
 
 from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
-from talking_photo.validation import ValidationError, validate_inputs
+from talking_photo.tts import TTSGenerationError, synthesize_speech
+from talking_photo.validation import ValidationError, validate_inputs, validate_script
 
 PIPELINE_NOT_READY = "Pipeline 尚未啟用"
+AUDIO_PREVIEW_READY = "語音預覽已產生，可先播放確認聲音與語速。"
+AUDIO_PREVIEW_DIR = Path("temp") / "audio-preview"
+
+
+def generate_audio_preview(
+    script: str,
+    voice: str,
+    rate: float,
+) -> tuple[str | None, str]:
+    """Generate a Taiwan Mandarin TTS preview without requiring a portrait."""
+
+    try:
+        normalized_script = validate_script(script)
+        output_path = AUDIO_PREVIEW_DIR / f"{uuid4().hex}.mp3"
+        audio_path = synthesize_speech(
+            normalized_script,
+            voice,
+            float(rate),
+            str(output_path),
+        )
+    except ValidationError as exc:
+        return None, f"輸入有誤：{exc}"
+    except ValueError as exc:
+        return None, f"輸入有誤：{exc}"
+    except TTSGenerationError as exc:
+        return None, f"語音產生失敗：{exc}"
+
+    return audio_path, AUDIO_PREVIEW_READY
 
 
 def validate_before_pipeline(
@@ -15,14 +47,14 @@ def validate_before_pipeline(
     script: str,
     _voice: str,
     _rate: float,
-) -> tuple[None, None, str]:
-    """Validate user input before the real generation pipeline is connected."""
+) -> tuple[None, str]:
+    """Validate user input before the real video pipeline is connected."""
 
     try:
         validate_inputs(image, script)
     except ValidationError as exc:
-        return None, None, f"輸入有誤：{exc}"
-    return None, None, PIPELINE_NOT_READY
+        return None, f"輸入有誤：{exc}"
+    return None, PIPELINE_NOT_READY
 
 
 def build_app() -> gr.Blocks:
@@ -55,6 +87,7 @@ def build_app() -> gr.Blocks:
                     step=0.05,
                     label="語速",
                 )
+                preview_audio = gr.Button("產生語音預覽")
                 generate = gr.Button("產生影片", variant="primary")
 
             with gr.Column():
@@ -67,10 +100,16 @@ def build_app() -> gr.Blocks:
             "產生的內容應避免冒充、誤導或未經本人同意的公開發布。"
         )
 
+        preview_audio.click(
+            fn=generate_audio_preview,
+            inputs=[script, voice, rate],
+            outputs=[audio, status],
+        )
+
         generate.click(
             fn=validate_before_pipeline,
             inputs=[portrait, script, voice, rate],
-            outputs=[audio, video, status],
+            outputs=[video, status],
         )
 
     return demo
