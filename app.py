@@ -11,7 +11,6 @@ from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
 from talking_photo.tts import TTSGenerationError, synthesize_speech
 from talking_photo.validation import ValidationError, validate_script
 from talking_photo.pipeline import (
-    ENHANCEMENT_GFPGAN,
     ENHANCEMENT_NONE,
     ENHANCEMENT_OPTIONS,
     generate_talking_video,
@@ -64,8 +63,12 @@ def generate_video(
 
     try:
         result = generate_talking_video(
-            image, script, voice, float(rate), enhancement,
+            image,
+            script,
+            voice,
+            float(rate),
             progress_callback=lambda value, message: progress(value, desc=message),
+            enhancement=enhancement,
         )
     except ValueError as exc:
         return None, None, f"輸入有誤：{exc}"
