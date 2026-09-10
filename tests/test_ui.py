@@ -23,11 +23,19 @@ def test_video_rejects_missing_image() -> None:
 def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
     portrait = tmp_path / "portrait.png"
     Image.new("RGB", (512, 512), "white").save(portrait)
-    with patch("app.generate_talking_video", return_value=dict(audio_path="speech.mp3", video_path="real.mp4", device="cpu")) as pipeline:
+    result = dict(
+        audio_path="speech.mp3",
+        video_path="real.mp4",
+        device="cuda:0",
+        quality_mode="低顯示記憶體清晰模式",
+    )
+    with patch("app.generate_talking_video", return_value=result) as pipeline:
         audio, video, status = generate_video(str(portrait), "測試", "台灣女聲", 0.95)
     assert audio == "speech.mp3"
     assert video == "real.mp4"
     assert VIDEO_READY in status
+    assert "CUDA" in status
+    assert "低顯示記憶體清晰模式" in status
     assert pipeline.call_args.args == (str(portrait), "測試", "台灣女聲", 0.95)
 
 
