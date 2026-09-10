@@ -6,12 +6,12 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "setup_gfpgan.ps1"
 LOCK = Path(__file__).resolve().parents[1] / "requirements-gfpgan-lock.txt"
 
 
-def test_gfpgan_setup_is_path_independent_and_isolated() -> None:
+def test_gfpgan_setup_is_path_independent_and_uses_separate_env() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "$PSScriptRoot" in text
     assert 'Join-Path $PSScriptRoot ".."' in text
     assert '.venv-gfpgan' in text
-    assert '.venv\\Scripts' not in text
+    assert '$MainVenvPython = Join-Path $ProjectRoot ".venv\\Scripts\\python.exe"' in text
     assert "H:\\AI_Project" not in text
 
 
@@ -40,6 +40,14 @@ def test_gfpgan_setup_is_safe_to_rerun() -> None:
     assert "if (-not (Test-Path $GFPGANDir))" in text
     assert "if (-not (Test-Path $ModelPath))" in text
     assert '@("-C", $GFPGANDir, "checkout", "--force", $GFPGANRevision)' in text
+
+
+def test_gfpgan_setup_refreshes_required_wav2lip_patch() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "重新套用 Wav2Lip 相容性與嘴周柔和融合修正" in text
+    assert "scripts\\prepare_wav2lip.py" in text
+    assert "Invoke-Native $MainVenvPython" in text
+    assert "Wav2Lip 品質修正準備失敗" in text
 
 
 def test_gfpgan_setup_tolerates_benign_native_stderr_on_windows_powershell_51() -> None:
