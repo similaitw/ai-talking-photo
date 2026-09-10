@@ -19,6 +19,48 @@
 
 > Colab 的免費 GPU、GPU 型號與執行時間都不保證，資源與限制會動態調整。Gradio 公開網址只適合短時間互動測試，不應視為長期部署服務。
 
+## Windows 一鍵設定
+
+Windows 第一次使用前，請先自行準備：
+
+- Git for Windows
+- 64 位元 Python 3.11
+- FFmpeg，且 `ffmpeg` 已加入 PATH
+- 若要用 NVIDIA CUDA：已安裝可用的 NVIDIA 驅動程式
+
+本專案**不會自動安裝或更新 NVIDIA 驅動程式**。
+
+在專案根目錄開啟 PowerShell，例如目前專案放在 `H:\AI_Project\ai-talking-photo` 時：
+
+```powershell
+cd H:\AI_Project\ai-talking-photo
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+```
+
+`setup_windows.ps1` 會：
+
+1. 檢查 Git、Python 3.11、FFmpeg 與 NVIDIA GPU／驅動資訊。
+2. 建立或沿用 Python 3.11 的 `.venv`。
+3. 安裝已驗證的 PyTorch 2.5.1+cu118 與 Wav2Lip 相依套件。
+4. 下載並固定官方 Wav2Lip commit `bac9a81e63ecc153202353372e5724b83d9e6322`。
+5. 第一次執行時下載官方 GAN 與 S3FD 模型；已存在時不重複下載。
+6. 執行 `prepare_wav2lip.py` 驗證來源與模型格式。
+7. 執行 Doctor；通過後顯示啟動指令。
+
+腳本以 `$PSScriptRoot` 找專案根目錄，不依賴固定磁碟機或資料夾名稱；重跑時會沿用正確的 `.venv`、Wav2Lip 與模型，不會覆蓋成其他來源版本。若既有 `.venv` 不是 Python 3.11，或 `vendor\Wav2Lip` 不是 Git repository，腳本會停止並要求人工處理，以免破壞既有資料。
+
+設定完成後：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python scripts\doctor.py
+python app.py
+```
+
+啟動後預設網址：`http://127.0.0.1:7860`。
+
+> GTX 1050 2GB 已能真實產出短片，但仍建議優先使用 Colab。M6.2 會針對 2GB 顯示記憶體再做專門驗證與最佳化。
+
 ## 目前可用功能
 
 - 上傳人物照片與輸入繁體中文講稿
@@ -33,14 +75,14 @@
 - Wav2Lip subprocess wrapper：支援 CPU、CUDA 與低顯示記憶體參數
 - 真實端到端流程：Edge TTS → FFmpeg → Wav2Lip → H.264／AAC MP4
 - Google Colab Run All notebook
+- 可重複執行的 Windows 設定腳本
 
-## 本機執行
+## 一般開發與測試
 
 一般 Python 相依套件：
 
 ```bash
 python -m pip install -r requirements.txt
-python app.py
 ```
 
 測試：
@@ -51,18 +93,6 @@ python -m pytest
 
 詳細規格請見 `docs/SPEC.md`，目前工作請見 `docs/TASKS.md`。
 
-## 音訊格式轉換
-
-請另行安裝 FFmpeg，並確認終端機可執行 `ffmpeg -version`；Python 相依套件不包含 FFmpeg 執行檔。
-
-```python
-from talking_photo.media import normalize_audio
-
-wav_path = normalize_audio("temp/speech.mp3", "temp/speech.wav")
-```
-
-函式會建立輸出資料夾並回傳 WAV 的絕對路徑，供後續 Wav2Lip 使用。輸入與輸出必須是不同檔案，輸出副檔名須為 `.wav`；成功時取代既有輸出，失敗時保留既有輸出並提供繁體中文錯誤訊息。
-
 ## 環境診斷
 
 ```bash
@@ -70,41 +100,18 @@ python scripts/doctor.py
 python scripts/doctor.py --model-path "models/自訂模型.pth"
 ```
 
-Doctor 會檢查 Python、PyTorch、CUDA、目前 CUDA 裝置的 GPU 與顯示記憶體總容量、FFmpeg、edge-tts，以及模型檔。預設模型路徑為 `models/wav2lip_gan.pth`；可用 `--model-path` 指定其他 checkpoint。
+Doctor 會檢查 Python、PyTorch、CUDA、GPU 與顯示記憶體、FFmpeg、edge-tts，以及模型檔。GTX 1050 2GB（顯示記憶體不超過 2.5 GiB）建議優先使用 Google Colab GPU；RTX 3060 12GB 可使用本機 CUDA。無可用 CUDA 時，本機 CPU 僅作為備援。
 
-GTX 1050 2GB（顯示記憶體不超過 2.5 GiB）建議優先使用 Google Colab GPU，本機低顯示記憶體模式僅作為備援；RTX 3060 12GB 可使用本機 CUDA。無可用 CUDA 時建議 Colab，本機 CPU 僅作為備援。
+## Wav2Lip 與模型
 
-## Wav2Lip Wrapper
-
-本 repository **不內建 Wav2Lip 原始碼或模型權重**。`talking_photo.wav2lip.generate_lip_sync()` 會呼叫外部 Wav2Lip checkout 的 `inference.py`。
-
-預設位置：
+本 repository **不內建 Wav2Lip 原始碼或模型權重**。預設外部位置：
 
 ```text
 vendor/Wav2Lip/inference.py
 models/wav2lip_gan.pth
 ```
 
-也可使用環境變數自訂：
-
-```text
-WAV2LIP_DIR
-WAV2LIP_CHECKPOINT
-```
-
-範例：
-
-```python
-from talking_photo.wav2lip import generate_lip_sync
-
-video_path = generate_lip_sync(
-    image_path="temp/portrait.png",
-    audio_path="temp/speech.wav",
-    output_path="output/result.mp4",
-    device="cpu",          # 或 cuda / cuda:0
-    low_vram=True,
-)
-```
+也可使用環境變數 `WAV2LIP_DIR` 與 `WAV2LIP_CHECKPOINT` 自訂。
 
 低顯示記憶體模式會使用 `face_det_batch_size=1`、`wav2lip_batch_size=1` 與 `resize_factor=2`。如果指定 CUDA，wrapper 會先確認 CUDA 可用，並拒絕 Wav2Lip 靜默改用 CPU；CUDA OOM 會顯示繁體中文建議，不會自動轉跑 CPU。
 
@@ -114,24 +121,7 @@ video_path = generate_lip_sync(
 
 ## 已驗證的 Windows 端到端環境
 
-已驗證環境：Windows、Python 3.11.9、PyTorch 2.5.1+cu118、NVIDIA 驅動程式 560.94、GTX 1050 2GB、FFmpeg 8.1.2。使用專案獨立 `.venv`，不要使用系統 Python 3.14 直接執行舊版 Wav2Lip。
-
-在專案根目錄執行 PowerShell：
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu118
-.\.venv\Scripts\python -m pip install -r requirements-wav2lip-lock.txt
-git clone https://github.com/Rudrabha/Wav2Lip.git vendor/Wav2Lip
-git -C vendor/Wav2Lip checkout bac9a81e63ecc153202353372e5724b83d9e6322
-.\.venv\Scripts\python -m gdown 15G3U08c8xsCkOqQxE38Z2XXDnPcOptNk -O models/wav2lip_gan.pth
-curl.exe -L --fail https://www.adrianbulat.com/downloads/python-fan/s3fd-619a316812.pth -o vendor/Wav2Lip/face_detection/detection/sfd/s3fd.pth
-.\.venv\Scripts\python scripts/prepare_wav2lip.py
-.\.venv\Scripts\python scripts/doctor.py
-.\.venv\Scripts\python app.py
-```
-
-`requirements-wav2lip-lock.txt` 保存成功環境的完整套件版本（PyTorch 另由官方 CUDA 索引安裝）。官方原始 requirements 面向舊 Python，請勿覆蓋安裝。
+2026-09-10 已驗證：Windows、Python 3.11.9、PyTorch 2.5.1+cu118、NVIDIA 驅動程式 560.94、GTX 1050 2GB、FFmpeg 8.1.2。
 
 模型來源使用官方 Wav2Lip README 指定來源。下載檔 SHA-256：
 
@@ -142,17 +132,13 @@ curl.exe -L --fail https://www.adrianbulat.com/downloads/python-fan/s3fd-619a316
 
 `prepare_wav2lip.py` 會核對來源雜湊與 checkout 版本，將官方 GAN TorchScript 轉成官方 `inference.py` 可載入的 state_dict，並以官方模型 `strict=True` 驗證。沒有重新訓練或替換模型。
 
-每次工作使用 `temp/<UUID>/`，成功後保留 `speech.mp3` 供預覽，以及 `output/<UUID>.mp4`；中間圖片、WAV 與 raw MP4 會清除，失敗工作會移除。
-
 GTX 1050 2GB 會使用 `low_vram=True`、batch size 1，pipeline 並將人物圖片等比例縮至最長邊不超過 512 px。CUDA OOM 時會直接提示改用 Colab 或降低圖片解析度，不會自動重試 CPU。
 
-若要**明確選擇 CPU 備援**：
+若要明確選擇 CPU 備援：
 
 ```powershell
 $env:TALKING_PHOTO_DEVICE = "cpu"
 .\.venv\Scripts\python app.py
-
-# 恢復自動偵測
 Remove-Item Env:TALKING_PHOTO_DEVICE
 ```
 
@@ -163,9 +149,7 @@ Remove-Item Env:TALKING_PHOTO_DEVICE
 .\.venv\Scripts\python -m pytest
 ```
 
-請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。此腳本會真的連線 Edge TTS、執行 FFmpeg 與 Wav2Lip，檢查影片長度、H.264／AAC 串流及完整解碼。
-
-2026-09-10 實測使用 AI 生成的虛構成人人像、短繁體中文講稿，在 NVIDIA GTX 1050 2GB／CUDA／`low_vram=True` 成功產出 **7.872 秒**影片；另以真實 Gradio 上傳與「產生影片」按鈕測試，預設語速 0.95 成功產出 **8.32 秒**影片。未使用 CPU 備援，未以 mock 代替真實推論。
+請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。2026-09-10 已在 GTX 1050 2GB／CUDA／`low_vram=True` 真實產出 **7.872 秒**影片，另以真實 Gradio 操作成功產出 **8.32 秒**影片。
 
 ## 安全與隱私
 
