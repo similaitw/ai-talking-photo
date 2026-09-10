@@ -19,11 +19,11 @@ from talking_photo.pipeline import (
 from talking_photo.tts import TTSGenerationError
 
 
-def test_video_rejects_missing_image() -> None:
+def test_video_rejects_missing_media() -> None:
     audio, video, status = generate_video(None, "測試", "台灣女聲", 0.95)
     assert audio is None
     assert video is None
-    assert "請上傳人物照片" in status
+    assert "請上傳人物照片或影片" in status
 
 
 def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
@@ -36,12 +36,14 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
         backend=BACKEND_WAV2LIP,
         quality_mode="低顯示記憶體清晰模式",
         enhancement_mode="未啟用",
+        source_type="照片",
     )
     with patch("app.generate_talking_video", return_value=result) as pipeline:
         audio, video, status = generate_video(str(portrait), "測試", "台灣女聲", 0.95)
     assert audio == "speech.mp3"
     assert video == "real.mp4"
     assert VIDEO_READY in status
+    assert "照片" in status
     assert "CUDA" in status
     assert BACKEND_WAV2LIP in status
     assert "低顯示記憶體清晰模式" in status
@@ -49,6 +51,21 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
     assert pipeline.call_args.args == (str(portrait), "測試", "台灣女聲", 0.95)
     assert pipeline.call_args.kwargs["enhancement"] == ENHANCEMENT_NONE
     assert pipeline.call_args.kwargs["backend"] == BACKEND_WAV2LIP
+
+
+def test_video_status_reports_video_source() -> None:
+    result = dict(
+        audio_path="speech.mp3",
+        video_path="real.mp4",
+        device="cuda:0",
+        backend=BACKEND_WAV2LIP,
+        quality_mode="影片模式",
+        enhancement_mode="未啟用",
+        source_type="影片",
+    )
+    with patch("app.generate_talking_video", return_value=result):
+        _, _, status = generate_video("portrait.mp4", "測試", "台灣女聲", 1)
+    assert "影片／CUDA" in status
 
 
 def test_video_passes_gfpgan_selection() -> None:
@@ -92,7 +109,7 @@ def test_video_passes_musetalk_selection() -> None:
 
 def test_video_reports_oom_and_clears_stale_previews() -> None:
     from talking_photo.wav2lip import Wav2LipError
-    with patch("app.generate_talking_video", side_effect=Wav2LipError("GTX 1050 2GB 顯示記憶體不足，請使用 Google Colab GPU 或降低圖片解析度。")):
+    with patch("app.generate_talking_video", side_effect=Wav2LipError("GTX 1050 2GB 顯示記憶體不足，請使用 Google Colab GPU 或降低人物素材解析度。")):
         audio, video, status = generate_video("portrait.png", "測試", "台灣女聲", 1)
     assert audio is None and video is None
     assert "GTX 1050 2GB" in status and "Colab" in status
@@ -164,10 +181,16 @@ def test_gradio_shell_contains_required_components() -> None:
         if component["type"] == "button"
     }
 
-    assert {"image", "textbox", "dropdown", "slider", "audio", "video"} <= component_types
+    assert {"file", "textbox", "dropdown", "slider", "audio", "video"} <= component_types
     assert {
-        "人物照片", "講稿", "聲音", "語速", "嘴型引擎", "畫質後處理", "語音預覽", "影片預覽"
+        "人物素材（照片或影片）", "講稿", "聲音", "語速", "嘴型引擎", "畫質後處理", "語音預覽", "影片預覽"
     } <= labels
+    portrait = next(
+        component for component in components
+        if component.get("props", {}).get("label") == "人物素材（照片或影片）"
+    )
+    assert portrait["type"] == "file"
+    assert portrait["props"]["file_types"] == ["image", "video"]
     assert {"產生語音預覽", "產生影片"} <= button_values
     video_event = next(fn for fn in demo.fns.values() if fn.fn == generate_video)
     assert [component.get_block_name() for component in video_event.outputs] == ["audio", "video", "markdown"]
