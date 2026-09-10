@@ -52,8 +52,9 @@ def generate_talking_video(
     text: str,
     voice: str,
     rate: float,
-    enhancement: str = ENHANCEMENT_NONE,
     progress_callback: Callable[[float, str], None] | None = None,
+    *,
+    enhancement: str = ENHANCEMENT_NONE,
 ) -> dict:
     """Return paths and runtime metadata for one talking-photo job.
 
