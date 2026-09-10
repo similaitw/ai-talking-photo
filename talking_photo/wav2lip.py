@@ -73,6 +73,19 @@ def _cuda_index(device: str) -> int | None:
     return index
 
 
+def _validate_face_box(
+    face_box: tuple[int, int, int, int] | None,
+) -> tuple[int, int, int, int] | None:
+    if face_box is None:
+        return None
+    if len(face_box) != 4:
+        raise ValueError("face_box 必須包含上、下、左、右四個座標。")
+    top, bottom, left, right = (int(value) for value in face_box)
+    if min(top, left) < 0 or bottom <= top or right <= left:
+        raise ValueError("face_box 座標無效，必須符合上 < 下、左 < 右且不可為負值。")
+    return top, bottom, left, right
+
+
 def _build_command(
     inference_script: Path,
     checkpoint: Path,
@@ -81,6 +94,8 @@ def _build_command(
     output: Path,
     *,
     low_vram: bool,
+    face_box: tuple[int, int, int, int] | None = None,
+    soft_blend: bool = False,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -96,6 +111,10 @@ def _build_command(
         "--static",
         "True",
     ]
+    if face_box is not None:
+        command.extend(["--box", *(str(value) for value in face_box)])
+    if soft_blend:
+        command.append("--soft_blend")
     if low_vram:
         command.extend(
             [
@@ -114,11 +133,16 @@ def _friendly_failure(output: str) -> str:
     lowered = output.lower()
     if "out of memory" in lowered or "image too big to run face detection on gpu" in lowered:
         return (
-            "CUDA 顯示記憶體不足（GTX 1050 2GB 容量有限）。建議下一階段使用 Google Colab GPU、降低圖片解析度，"
+            "CUDA 顯示記憶體不足（GTX 1050 2GB 容量有限）。建議使用 Google Colab GPU、降低圖片解析度，"
             "或縮短單段音訊；系統不會自動改用 CPU。"
         )
     if "face not detected" in lowered or "face not found" in lowered:
         return "找不到可用的人臉，請改用正面、清楚且嘴部未遮擋的照片。"
+    if "unrecognized arguments: --soft_blend" in lowered:
+        return (
+            "目前 Wav2Lip 尚未套用嘴周柔和融合修正。請重新執行 "
+            "python scripts/prepare_wav2lip.py 後再產生影片。"
+        )
     return (
         "Wav2Lip 推論失敗，請先執行 python scripts/doctor.py，"
         "並檢查模型、相依套件與輸入檔案。"
@@ -131,16 +155,20 @@ def generate_lip_sync(
     output_path: str,
     device: str,
     low_vram: bool = False,
+    face_box: tuple[int, int, int, int] | None = None,
+    soft_blend: bool = False,
 ) -> str:
     """Run Wav2Lip for a still image and normalized audio, returning an MP4 path.
 
     Wav2Lip itself is kept as an external checkout. Set ``WAV2LIP_DIR`` to its
     repository directory and optionally ``WAV2LIP_CHECKPOINT`` to a checkpoint.
-    A temporary output is used so failed inference does not destroy an existing file.
+    ``face_box`` uses Wav2Lip's (top, bottom, left, right) order. A temporary
+    output is used so failed inference does not destroy an existing file.
     """
     image = Path(image_path).expanduser().resolve()
     audio = Path(audio_path).expanduser().resolve()
     destination = Path(output_path).expanduser().resolve()
+    face_box = _validate_face_box(face_box)
 
     if not _nonempty_file(image):
         raise ValueError("找不到人物照片或檔案為空白。")
@@ -187,6 +215,8 @@ def generate_lip_sync(
             audio,
             temporary,
             low_vram=low_vram,
+            face_box=face_box,
+            soft_blend=soft_blend,
         )
         try:
             # Upstream writes temp/result.avi relative to cwd: isolate every call.
