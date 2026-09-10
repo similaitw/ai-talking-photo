@@ -111,4 +111,4 @@ vendor/MuseTalk/
 
 ## 隱私
 
-Colab notebook 會用 Gradio `share=True` 建立暫時性的公開網址。不要把敏感照片、未取得適當同意的人像或不應外流的講稿交給公開 share URL。影片產生後請自行保存；Colab 工作階段結束後暫存內容可能消失。
+Colab notebook 會用 Gradio `share=True` 建立暫時性的公開 `gradio.live` 網址。不要把敏感照片、未取得適當同意的人像或不應外流的講稿交給公開 `gradio.live` 連結。影片產生後請自行保存；Colab 工作階段結束後暫存內容可能消失。
