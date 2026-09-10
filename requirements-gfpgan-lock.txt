@@ -1,0 +1,10 @@
+# Dedicated .venv-gfpgan on Python 3.11.
+# Install torch/torchvision 2.1.2/0.16.2 from the official cu118 index separately.
+numpy==1.26.4
+opencv-python==4.10.0.84
+basicsr==1.4.2
+facexlib==0.3.0
+lmdb==1.7.5
+PyYAML==6.0.3
+scipy==1.13.1
+tqdm==4.70.0
