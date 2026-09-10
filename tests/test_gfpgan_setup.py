@@ -42,6 +42,14 @@ def test_gfpgan_setup_is_safe_to_rerun() -> None:
     assert '@("-C", $GFPGANDir, "checkout", "--force", $GFPGANRevision)' in text
 
 
+def test_gfpgan_setup_tolerates_benign_native_stderr_on_windows_powershell_51() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "[System.IO.Path]::GetTempFileName()" in text
+    assert "2> $stderrPath" in text
+    assert "$exitCode = $LASTEXITCODE" in text
+    assert "Write-Host $stderrText -ForegroundColor DarkYellow" in text
+
+
 def test_gfpgan_setup_explains_low_vram_profile_in_traditional_chinese() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     for phrase in (
