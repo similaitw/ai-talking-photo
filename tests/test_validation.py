@@ -1,14 +1,19 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
+import talking_photo.validation as validation
 from talking_photo.validation import (
     ValidationError,
+    media_kind,
     normalize_script,
     validate_image,
     validate_inputs,
+    validate_media,
     validate_script,
+    validate_video,
 )
 
 
@@ -63,6 +68,45 @@ def test_validate_image_rejects_small_image(tmp_path: Path) -> None:
 def test_validate_image_accepts_png(tmp_path: Path) -> None:
     image = make_image(tmp_path / "portrait.png")
     assert validate_image(image) == image.resolve()
+    assert validate_media(image) == image.resolve()
+    assert media_kind(image) == "image"
+
+
+def test_validate_video_accepts_supported_container(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "portrait.mp4"
+    video.write_bytes(b"fake-video")
+    monkeypatch.setattr(validation, "probe_video_size", lambda path: (1280, 720))
+    assert validate_video(video) == video.resolve()
+    assert validate_media(video) == video.resolve()
+    assert media_kind(video) == "video"
+
+
+def test_validate_video_rejects_small_dimensions(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "small.mov"
+    video.write_bytes(b"fake-video")
+    monkeypatch.setattr(validation, "probe_video_size", lambda path: (1920, 200))
+    with pytest.raises(ValidationError, match="影片尺寸太小"):
+        validate_video(video)
+
+
+def test_probe_video_size_uses_first_video_stream(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "portrait.webm"
+    video.write_bytes(b"fake-video")
+
+    def fake_run(command, **kwargs):
+        assert command[0] == "ffprobe"
+        assert "v:0" in command
+        return SimpleNamespace(stdout='{"streams":[{"width":1080,"height":1920}]}')
+
+    monkeypatch.setattr(validation.subprocess, "run", fake_run)
+    assert validation.probe_video_size(video) == (1080, 1920)
+
+
+def test_validate_media_rejects_unknown_suffix(tmp_path: Path) -> None:
+    source = tmp_path / "portrait.avi"
+    source.write_bytes(b"video")
+    with pytest.raises(ValidationError, match="不支援此人物素材格式"):
+        validate_media(source)
 
 
 def test_validate_inputs_returns_normalized_values(tmp_path: Path) -> None:
