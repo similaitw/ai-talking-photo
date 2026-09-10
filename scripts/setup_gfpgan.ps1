@@ -38,11 +38,34 @@ function Invoke-Native {
 
 function Invoke-NativeOutput {
     param([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage)
-    $result = & $FilePath @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage（結束代碼：$LASTEXITCODE）"
+
+    # Windows PowerShell 5.1 can turn native stderr redirected with 2>&1 into
+    # NativeCommandError when ErrorActionPreference is Stop. Capture stderr in
+    # a temporary file instead, then decide success only from the real exit code.
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $result = & $FilePath @Arguments 2> $stderrPath
+        $exitCode = $LASTEXITCODE
+        $stderrText = ""
+        if (Test-Path $stderrPath) {
+            $stderrText = (Get-Content $stderrPath -Raw -ErrorAction SilentlyContinue)
+        }
+
+        if ($exitCode -ne 0) {
+            if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                Write-Host $stderrText -ForegroundColor Red
+            }
+            throw "$FailureMessage（結束代碼：$exitCode）"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+            Write-Host $stderrText -ForegroundColor DarkYellow
+        }
+        return (($result | Out-String).Trim())
     }
-    return (($result | Out-String).Trim())
+    finally {
+        Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Resolve-Python311 {
