@@ -1,6 +1,10 @@
 from pathlib import Path
 
 
-def test_gfpgan_setup_has_utf8_bom_for_windows_powershell_51() -> None:
-    script = Path(__file__).resolve().parents[1] / "scripts" / "setup_gfpgan.ps1"
-    assert script.read_bytes().startswith(b"\xef\xbb\xbf")
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_windows_setup_scripts_have_utf8_bom_for_powershell_51() -> None:
+    for relative in ("scripts/setup_windows.ps1", "scripts/setup_gfpgan.ps1"):
+        script = ROOT / relative
+        assert script.read_bytes().startswith(b"\xef\xbb\xbf"), relative
