@@ -112,9 +112,9 @@ def _build_command(
 
 def _friendly_failure(output: str) -> str:
     lowered = output.lower()
-    if "cuda out of memory" in lowered or "out of memory" in lowered:
+    if "out of memory" in lowered or "image too big to run face detection on gpu" in lowered:
         return (
-            "CUDA 顯示記憶體不足。請改用 Google Colab GPU、降低圖片解析度，"
+            "CUDA 顯示記憶體不足（GTX 1050 2GB 容量有限）。建議下一階段使用 Google Colab GPU、降低圖片解析度，"
             "或縮短單段音訊；系統不會自動改用 CPU。"
         )
     if "face not detected" in lowered or "face not found" in lowered:
@@ -189,16 +189,19 @@ def generate_lip_sync(
             low_vram=low_vram,
         )
         try:
-            result = subprocess.run(
-                command,
-                cwd=wav2lip_dir,
-                env=env,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
+            # Upstream writes temp/result.avi relative to cwd: isolate every call.
+            with tempfile.TemporaryDirectory(prefix="inference-", dir=destination.parent) as work:
+                (Path(work) / "temp").mkdir()
+                result = subprocess.run(
+                    command,
+                    cwd=work,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
         except FileNotFoundError as exc:
             raise Wav2LipConfigurationError(
                 "無法啟動 Python 執行 Wav2Lip，請檢查目前 Python 環境。"

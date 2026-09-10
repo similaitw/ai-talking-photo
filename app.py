@@ -9,9 +9,12 @@ import gradio as gr
 
 from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
 from talking_photo.tts import TTSGenerationError, synthesize_speech
-from talking_photo.validation import ValidationError, validate_inputs, validate_script
+from talking_photo.validation import ValidationError, validate_script
+from talking_photo.pipeline import generate_talking_video, PipelineError
+from talking_photo.media import AudioNormalizationError
+from talking_photo.wav2lip import Wav2LipError
 
-PIPELINE_NOT_READY = "Pipeline 尚未啟用"
+VIDEO_READY = "影片已產生，可播放或下載語音與影片。"
 AUDIO_PREVIEW_READY = "語音預覽已產生，可先播放確認聲音與語速。"
 AUDIO_PREVIEW_DIR = Path("temp") / "audio-preview"
 
@@ -42,19 +45,26 @@ def generate_audio_preview(
     return audio_path, AUDIO_PREVIEW_READY
 
 
-def validate_before_pipeline(
+def generate_video(
     image: str | None,
     script: str,
-    _voice: str,
-    _rate: float,
-) -> tuple[None, str]:
-    """Validate user input before the real video pipeline is connected."""
+    voice: str,
+    rate: float,
+    progress=gr.Progress(),
+) -> tuple[str | None, str | None, str]:
+    """Run the real pipeline and update both media previews."""
 
     try:
-        validate_inputs(image, script)
-    except ValidationError as exc:
-        return None, f"輸入有誤：{exc}"
-    return None, PIPELINE_NOT_READY
+        result = generate_talking_video(
+            image, script, voice, float(rate),
+            progress_callback=lambda value, message: progress(value, desc=message),
+        )
+    except ValueError as exc:
+        return None, None, f"輸入有誤：{exc}"
+    except (PipelineError, TTSGenerationError, AudioNormalizationError, Wav2LipError, OSError) as exc:
+        return None, None, f"影片產生失敗：{exc}"
+    mode = "CPU 備援" if result["device"] == "cpu" else "CUDA"
+    return result["audio_path"], result["video_path"], f"{VIDEO_READY}（{mode}）"
 
 
 def build_app() -> gr.Blocks:
@@ -107,12 +117,13 @@ def build_app() -> gr.Blocks:
         )
 
         generate.click(
-            fn=validate_before_pipeline,
+            fn=generate_video,
             inputs=[portrait, script, voice, rate],
-            outputs=[video, status],
+            outputs=[audio, video, status],
+            concurrency_limit=1,
         )
 
-    return demo
+    return demo.queue()
 
 
 def main() -> None:

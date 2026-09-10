@@ -73,10 +73,15 @@ def test_invalid_device_name_is_rejected(device: str) -> None:
 
 def test_cpu_hides_cuda(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     image, audio, output, _ = prepare_runtime(tmp_path, monkeypatch)
+    workdirs = []
 
     def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
         Path(command[command.index("--outfile") + 1]).write_bytes(b"mp4")
         assert kwargs["env"]["CUDA_VISIBLE_DEVICES"] == ""
+        work = Path(kwargs["cwd"])
+        assert (work / "temp").is_dir()
+        (work / "temp" / "result.avi").write_bytes(b"intermediate")
+        workdirs.append(work)
         return SimpleNamespace(stdout="Using cpu for inference.", stderr="")
 
     monkeypatch.setattr(wav2lip.subprocess, "run", fake_run)
@@ -84,6 +89,9 @@ def test_cpu_hides_cuda(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
         output.resolve()
     )
     assert output.read_bytes() == b"mp4"
+    generate_lip_sync(str(image), str(audio), str(output), "cpu")
+    assert workdirs[0] != workdirs[1]
+    assert all(not work.exists() for work in workdirs)
 
 
 def test_cuda_selects_requested_device(

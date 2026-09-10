@@ -2,7 +2,7 @@
 
 ## Current task
 
-M4.2 — End-to-End Talking Photo
+M5.1 — Colab Notebook
 
 ## Milestones
 
@@ -15,7 +15,7 @@ M4.2 — End-to-End Talking Photo
 - [x] M3.1 FFmpeg Audio Normalize
 - [x] M3.2 Doctor
 - [x] M4.1 Wav2Lip Wrapper
-- [ ] M4.2 End-to-End Talking Photo
+- [x] M4.2 End-to-End Talking Photo
 - [ ] M5.1 Colab Notebook
 - [ ] M5.2 Colab Documentation
 - [ ] M6.1 Windows Setup
@@ -86,3 +86,15 @@ M4.2 — End-to-End Talking Photo
 - 推論先寫入暫存 MP4，成功後才原子取代正式輸出，失敗時保留既有影片並清除暫存檔。
 - 新增 16 項 wrapper focused tests；不下載模型、不執行 GPU inference。
 - README 補充 Wav2Lip 外部安裝方式、環境變數、低顯示記憶體行為與第三方非商業使用限制。
+
+### M4.2 — End-to-End Talking Photo
+- 實作 `generate_talking_video()`：驗證 → UUID 工作資料夾 → Edge TTS MP3 → 16 kHz 單聲道 PCM WAV → 既有 Wav2Lip wrapper → H.264／AAC MP4，提供繁體中文階段進度。
+- Gradio「產生影片」已接入真實流程，成功回傳語音與影片預覽；錯誤清除舊預覽並顯示原因。
+- 每次工作及 wrapper 的官方暫存 AVI 皆隔離；成功清除中間檔、保留 MP3／MP4，失敗清除該 UUID 工作，不覆蓋使用者原圖。
+- GTX 1050 2GB 使用 `low_vram=True`、batch size 1、照片最長邊 512 px；CUDA OOM 提示 Colab／降低解析度，不自動切換 CPU。可透過環境變數明確指定 CPU 備援。
+- 準備官方 Wav2Lip commit `bac9a81e63ecc153202353372e5724b83d9e6322`，固定 Python 3.11／PyTorch 2.5.1+cu118 與相容音訊套件；新增相依版本清單、官方權重驗證／格式轉換腳本及 README 重現步驟。
+- 真實推論最初卡在官方 GAN TorchScript 與 inference.py 預期格式不一致；已將同一官方權重轉成 state_dict 並以官方模型 strict=True 驗證，沒有換用其他來源模型。
+- 真實 E2E（2026-09-10）：AI 生成的虛構成人人像、短繁體中文講稿、真實 Edge TTS／FFmpeg／Wav2Lip，在 NVIDIA GTX 1050 2GB、CUDA、low_vram=True 成功產出 7.872 秒 H.264／AAC MP4，通過 ffprobe 與完整解碼。沒有使用 CPU 備援。
+- 真實 Gradio 瀏覽器驗證：上傳人像、輸入講稿、按「產生影片」，預設語速 0.95 成功產出 8.32 秒影片，成功狀態、語音播放及影片播放均正常。
+- 完整 `python -m pytest`：Python 3.11 推論環境與系統 Python 3.14 皆為 86 passed，無略過。CI 仍僅跑測試、不下載模型或執行 GPU inference。
+- Wav2Lip checkout、權重、測試圖片、影音與暫存檔皆未納入 Git；未開始 M5.1 的實作。

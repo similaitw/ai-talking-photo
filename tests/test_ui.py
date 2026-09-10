@@ -5,28 +5,38 @@ from PIL import Image
 
 from app import (
     AUDIO_PREVIEW_READY,
-    PIPELINE_NOT_READY,
+    VIDEO_READY,
     build_app,
     generate_audio_preview,
-    validate_before_pipeline,
+    generate_video,
 )
 from talking_photo.tts import TTSGenerationError
 
 
-def test_pipeline_placeholder_rejects_missing_image() -> None:
-    video, status = validate_before_pipeline(None, "測試", "台灣女聲", 0.95)
+def test_video_rejects_missing_image() -> None:
+    audio, video, status = generate_video(None, "測試", "台灣女聲", 0.95)
+    assert audio is None
     assert video is None
     assert "請上傳人物照片" in status
 
 
-def test_pipeline_placeholder_is_explicit_after_valid_input(tmp_path: Path) -> None:
+def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
     portrait = tmp_path / "portrait.png"
     Image.new("RGB", (512, 512), "white").save(portrait)
-    video, status = validate_before_pipeline(
-        str(portrait), "測試", "台灣女聲", 0.95
-    )
-    assert video is None
-    assert status == PIPELINE_NOT_READY
+    with patch("app.generate_talking_video", return_value=dict(audio_path="speech.mp3", video_path="real.mp4", device="cpu")) as pipeline:
+        audio, video, status = generate_video(str(portrait), "測試", "台灣女聲", 0.95)
+    assert audio == "speech.mp3"
+    assert video == "real.mp4"
+    assert VIDEO_READY in status
+    assert pipeline.call_args.args == (str(portrait), "測試", "台灣女聲", 0.95)
+
+
+def test_video_reports_oom_and_clears_stale_previews() -> None:
+    from talking_photo.wav2lip import Wav2LipError
+    with patch("app.generate_talking_video", side_effect=Wav2LipError("GTX 1050 2GB 顯示記憶體不足，請使用 Google Colab GPU 或降低圖片解析度。")):
+        audio, video, status = generate_video("portrait.png", "測試", "台灣女聲", 1)
+    assert audio is None and video is None
+    assert "GTX 1050 2GB" in status and "Colab" in status
 
 
 def test_audio_preview_does_not_require_portrait(tmp_path: Path) -> None:
@@ -84,3 +94,5 @@ def test_gradio_shell_contains_required_components() -> None:
     assert {"image", "textbox", "dropdown", "slider", "audio", "video"} <= component_types
     assert {"人物照片", "講稿", "聲音", "語速", "語音預覽", "影片預覽"} <= labels
     assert {"產生語音預覽", "產生影片"} <= button_values
+    video_event = next(fn for fn in demo.fns.values() if fn.fn == generate_video)
+    assert [component.get_block_name() for component in video_event.outputs] == ["audio", "video", "markdown"]

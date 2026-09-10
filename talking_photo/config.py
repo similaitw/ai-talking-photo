@@ -1,5 +1,12 @@
 """Application configuration constants."""
 
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TEMP_DIR = PROJECT_ROOT / "temp"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+MODEL_DIR = PROJECT_ROOT / "models"
+
 APP_NAME = "AI Talking Photo"
 MAX_TEXT_LENGTH = 3000
 MIN_IMAGE_SIZE = 256

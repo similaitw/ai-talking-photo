@@ -11,6 +11,11 @@ temp/*
 output/*
 !output/.gitkeep
 vendor/Wav2Lip/
+*.pth
+*.pt
+*.torchscript
+.cache/
+.torch/
 *.mp4
 *.wav
 *.mp3
