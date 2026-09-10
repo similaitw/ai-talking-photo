@@ -14,10 +14,10 @@ python -m pytest
 
 ## 目前進度
 
-M1.1 Gradio Shell 已完成。可執行：
+M1.1 Gradio Shell 與 M1.2 輸入驗證已完成。可執行：
 
 ```bash
 python app.py
 ```
 
-目前介面可操作，但 AI 產生 pipeline 尚未接入；下一階段為輸入驗證。
+目前介面可操作並會檢查圖片與講稿；AI 產生 pipeline 尚未接入。下一階段為 Edge TTS。

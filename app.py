@@ -4,25 +4,31 @@ from __future__ import annotations
 
 import gradio as gr
 
-APP_TITLE = "AI Talking Photo"
+from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
+from talking_photo.validation import ValidationError, validate_inputs
+
 PIPELINE_NOT_READY = "Pipeline 尚未啟用"
 
 
-def pipeline_not_ready(
-    _image: str | None,
-    _script: str,
+def validate_before_pipeline(
+    image: str | None,
+    script: str,
     _voice: str,
     _rate: float,
 ) -> tuple[None, None, str]:
-    """Return an explicit placeholder state until the real pipeline exists."""
+    """Validate user input before the real generation pipeline is connected."""
 
+    try:
+        validate_inputs(image, script)
+    except ValidationError as exc:
+        return None, None, f"輸入有誤：{exc}"
     return None, None, PIPELINE_NOT_READY
 
 
 def build_app() -> gr.Blocks:
-    """Build the single-page Gradio UI defined by milestone M1.1."""
+    """Build the single-page Gradio UI."""
 
-    with gr.Blocks(title=APP_TITLE) as demo:
+    with gr.Blocks(title=APP_NAME) as demo:
         gr.Markdown(
             "# AI Talking Photo\n"
             "單張照片 + 中文講稿 → AI 說話影片\n\n"
@@ -31,10 +37,7 @@ def build_app() -> gr.Blocks:
 
         with gr.Row():
             with gr.Column():
-                portrait = gr.Image(
-                    type="filepath",
-                    label="人物照片",
-                )
+                portrait = gr.Image(type="filepath", label="人物照片")
                 script = gr.Textbox(
                     label="講稿",
                     lines=12,
@@ -42,13 +45,13 @@ def build_app() -> gr.Blocks:
                 )
                 voice = gr.Dropdown(
                     choices=["台灣女聲", "台灣男聲"],
-                    value="台灣女聲",
+                    value=DEFAULT_VOICE,
                     label="聲音",
                 )
                 rate = gr.Slider(
                     minimum=0.8,
                     maximum=1.2,
-                    value=0.95,
+                    value=DEFAULT_RATE,
                     step=0.05,
                     label="語速",
                 )
@@ -65,7 +68,7 @@ def build_app() -> gr.Blocks:
         )
 
         generate.click(
-            fn=pipeline_not_ready,
+            fn=validate_before_pipeline,
             inputs=[portrait, script, voice, rate],
             outputs=[audio, video, status],
         )

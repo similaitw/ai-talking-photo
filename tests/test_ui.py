@@ -1,8 +1,23 @@
-from app import PIPELINE_NOT_READY, build_app, pipeline_not_ready
+from pathlib import Path
+
+from PIL import Image
+
+from app import PIPELINE_NOT_READY, build_app, validate_before_pipeline
 
 
-def test_pipeline_placeholder_is_explicit() -> None:
-    audio, video, status = pipeline_not_ready(None, "測試", "台灣女聲", 0.95)
+def test_pipeline_placeholder_rejects_missing_image() -> None:
+    audio, video, status = validate_before_pipeline(None, "測試", "台灣女聲", 0.95)
+    assert audio is None
+    assert video is None
+    assert "請上傳人物照片" in status
+
+
+def test_pipeline_placeholder_is_explicit_after_valid_input(tmp_path: Path) -> None:
+    portrait = tmp_path / "portrait.png"
+    Image.new("RGB", (512, 512), "white").save(portrait)
+    audio, video, status = validate_before_pipeline(
+        str(portrait), "測試", "台灣女聲", 0.95
+    )
     assert audio is None
     assert video is None
     assert status == PIPELINE_NOT_READY

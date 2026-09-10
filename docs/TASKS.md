@@ -2,14 +2,14 @@
 
 ## Current task
 
-M1.2 — Validation
+M2.1 — Edge TTS
 
 ## Milestones
 
 - [x] M0.1 Repository Bootstrap
 - [x] M0.2 Agent / Spec / Tasks
 - [x] M1.1 Gradio Shell
-- [ ] M1.2 Validation
+- [x] M1.2 Validation
 - [ ] M2.1 Edge TTS
 - [ ] M2.2 Audio Preview
 - [ ] M3.1 FFmpeg Audio Normalize
@@ -38,3 +38,10 @@ M1.2 — Validation
 - Added portrait, script, voice, speed, audio preview, and video preview components.
 - Generate action explicitly returns `Pipeline 尚未啟用` until the real pipeline is connected.
 - Verified `python -m pytest`: 4 passed.
+
+### M1.2 — Validation
+- Added image validation for missing, unreadable, unsupported, and undersized images.
+- Added script validation for blank and over-3000-character input.
+- Added script normalization for line endings, whitespace, and Markdown bold markers.
+- Connected validation to the Gradio generate action before pipeline execution.
+- Verified `python -m pytest`: 15 passed.
