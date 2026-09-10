@@ -2,7 +2,7 @@
 
 ## Current task
 
-M5.1 — Colab Notebook
+M5.2 — Colab Documentation
 
 ## Milestones
 
@@ -16,7 +16,7 @@ M5.1 — Colab Notebook
 - [x] M3.2 Doctor
 - [x] M4.1 Wav2Lip Wrapper
 - [x] M4.2 End-to-End Talking Photo
-- [ ] M5.1 Colab Notebook
+- [x] M5.1 Colab Notebook
 - [ ] M5.2 Colab Documentation
 - [ ] M6.1 Windows Setup
 - [ ] M6.2 GTX 1050 Low VRAM
@@ -98,3 +98,10 @@ M5.1 — Colab Notebook
 - 真實 Gradio 瀏覽器驗證：上傳人像、輸入講稿、按「產生影片」，預設語速 0.95 成功產出 8.32 秒影片，成功狀態、語音播放及影片播放均正常。
 - 完整 `python -m pytest`：Python 3.11 推論環境與系統 Python 3.14 皆為 86 passed，無略過。CI 仍僅跑測試、不下載模型或執行 GPU inference。
 - Wav2Lip checkout、權重、測試圖片、影音與暫存檔皆未納入 Git；未開始 M5.1 的實作。
+
+### M5.1 — Colab Notebook
+- 新增 `notebooks/AI_Talking_Photo_Colab.ipynb`，可由乾淨 Colab GPU 工作階段依序 clone 專案、建立獨立 Python 3.11 環境、安裝已驗證的 PyTorch 2.5.1+cu118 與 Wav2Lip 相依套件、準備官方模型、執行 Doctor，最後以 Gradio `share=True` 提供公開網址。
+- Notebook 不依賴 Colab 預裝 Python 版本，降低預設 runtime 從 Python 3.12 升級至 3.13 後的相容性風險。
+- Wav2Lip 固定官方 commit `bac9a81e63ecc153202353372e5724b83d9e6322`，沿用官方 GAN／S3FD 下載來源與既有 SHA-256 驗證／格式轉換流程；不提交第三方原始碼、模型或輸出影音。
+- 新增 3 項 notebook 靜態測試，驗證合法 nbformat、GPU metadata、乾淨輸出、完整 Run All bootstrap 關鍵步驟，以及未嵌入 token／API key／密碼。
+- 本地 focused tests：3 passed；完整測試交由 GitHub Actions 驗收。M5.2 將補齊 Colab 使用說明與入口文件。
