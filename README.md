@@ -44,7 +44,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 3. 安裝已驗證的 PyTorch 2.5.1+cu118 與 Wav2Lip 相依套件。
 4. 下載並固定官方 Wav2Lip commit `bac9a81e63ecc153202353372e5724b83d9e6322`。
 5. 第一次執行時下載官方 GAN 與 S3FD 模型；已存在時不重複下載。
-6. 執行 `prepare_wav2lip.py` 驗證來源與模型格式。
+6. 執行 `prepare_wav2lip.py` 驗證來源、模型格式與本專案的相容性／品質修正。
 7. 執行 Doctor；通過後顯示啟動指令。
 
 腳本以 `$PSScriptRoot` 找專案根目錄，不依賴固定磁碟機或資料夾名稱；重跑時會沿用正確的 `.venv`、Wav2Lip 與模型，不會覆蓋成其他來源版本。若既有 `.venv` 不是 Python 3.11，或 `vendor\Wav2Lip` 不是 Git repository，腳本會停止並要求人工處理，以免破壞既有資料。
@@ -57,9 +57,33 @@ python scripts\doctor.py
 python app.py
 ```
 
-啟動後預設網址：`http://127.0.0.1:7860`。
+啟動後通常使用 `http://127.0.0.1:7860`；若該連接埠已被占用，Gradio 會自動改用 7861、7862 等下一個可用連接埠。
 
-> GTX 1050 2GB 已能真實產出短片，但仍建議優先使用 Colab。M6.2 會針對 2GB 顯示記憶體再做專門驗證與最佳化。
+## GTX 1050 2GB 清晰模式（M6.2）
+
+早期低顯存路徑會先把整張人物照片縮到 512 px，雖然穩定，但會讓背景、頭髮、衣服與臉部一起變模糊。新版低顯存清晰模式改為：
+
+1. 人物照片最多保留到長邊 **1280 px**；原圖本來小於 1280 px 時不縮小。
+2. 只建立最長邊 512 px 的 CPU 預覽來做人臉定位，不用 GTX 1050 執行大圖人臉偵測。
+3. 將預覽偵測到的臉框映射回較高解析度照片，使用 Wav2Lip `--box` 跳過 GPU 人臉偵測。
+4. Wav2Lip 仍維持 `wav2lip_batch_size=1` 與 `face_det_batch_size=1`。
+5. 只把生成結果以柔和遮罩融合到下半臉／嘴周，保留眼睛、額頭與大部分原始臉部細節。
+6. 最後 MP4 使用 H.264 CRF 18 重新封裝，降低二次壓縮造成的可見畫質損失。
+
+若 512 px 預覽找不到正面人臉，系統會自動退回已驗證的 512 px 相容模式，而不是冒險讓 GTX 1050 在大圖人臉偵測時 OOM。介面完成後會顯示實際使用「低顯示記憶體清晰模式」或「低顯示記憶體相容模式」。
+
+已完成過舊版 Windows 設定的使用者，更新 M6.2 後不需重裝環境，只要：
+
+```powershell
+cd H:\AI_Project\ai-talking-photo
+git pull --ff-only origin main
+.\.venv\Scripts\python scripts\prepare_wav2lip.py
+.\.venv\Scripts\python app.py
+```
+
+`prepare_wav2lip.py` 的嘴周融合修正可重複執行，不會重複插入程式碼。模型仍是同一份官方 Wav2Lip GAN 權重，沒有換模型或重新訓練。
+
+> Wav2Lip 本身仍以 96×96 臉部模型輸入進行嘴型生成，因此新版可以明顯改善「整體影片被縮糊」與「整塊臉被替換」的問題，但不能完全消除 Wav2Lip 模型本身的嘴型與細節上限。若追求更自然的嘴型，後續可加入較新的高品質 backend。
 
 ## 目前可用功能
 
@@ -72,8 +96,9 @@ python app.py
 - 獨立「產生語音預覽」按鈕
 - 在 Gradio 直接播放或下載產生的 MP3
 - FFmpeg 轉成 16 kHz、單聲道、16 位元 PCM WAV
-- Wav2Lip subprocess wrapper：支援 CPU、CUDA 與低顯示記憶體參數
+- Wav2Lip subprocess wrapper：支援 CPU、CUDA、固定臉框與低顯示記憶體參數
 - 真實端到端流程：Edge TTS → FFmpeg → Wav2Lip → H.264／AAC MP4
+- GTX 1050 低顯存清晰模式與 512 px 安全 fallback
 - Google Colab Run All notebook
 - 可重複執行的 Windows 設定腳本
 
@@ -113,7 +138,7 @@ models/wav2lip_gan.pth
 
 也可使用環境變數 `WAV2LIP_DIR` 與 `WAV2LIP_CHECKPOINT` 自訂。
 
-低顯示記憶體模式會使用 `face_det_batch_size=1`、`wav2lip_batch_size=1` 與 `resize_factor=2`。如果指定 CUDA，wrapper 會先確認 CUDA 可用，並拒絕 Wav2Lip 靜默改用 CPU；CUDA OOM 會顯示繁體中文建議，不會自動轉跑 CPU。
+低顯示記憶體模式固定 batch size 1。靜態照片的清晰路徑會先在 CPU 小預覽定位臉部，再用 `--box` 對較高解析度照片直接推論；這可避開大圖 S3FD 人臉偵測造成的 2GB VRAM 壓力。CUDA OOM 仍會顯示繁體中文建議，不會自動轉跑 CPU。
 
 官方 Wav2Lip：<https://github.com/Rudrabha/Wav2Lip>
 
@@ -132,8 +157,6 @@ models/wav2lip_gan.pth
 
 `prepare_wav2lip.py` 會核對來源雜湊與 checkout 版本，將官方 GAN TorchScript 轉成官方 `inference.py` 可載入的 state_dict，並以官方模型 `strict=True` 驗證。沒有重新訓練或替換模型。
 
-GTX 1050 2GB 會使用 `low_vram=True`、batch size 1，pipeline 並將人物圖片等比例縮至最長邊不超過 512 px。CUDA OOM 時會直接提示改用 Colab 或降低圖片解析度，不會自動重試 CPU。
-
 若要明確選擇 CPU 備援：
 
 ```powershell
@@ -149,7 +172,7 @@ Remove-Item Env:TALKING_PHOTO_DEVICE
 .\.venv\Scripts\python -m pytest
 ```
 
-請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。2026-09-10 已在 GTX 1050 2GB／CUDA／`low_vram=True` 真實產出 **7.872 秒**影片，另以真實 Gradio 操作成功產出 **8.32 秒**影片。
+請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。2026-09-10 已在 GTX 1050 2GB／CUDA／`low_vram=True` 真實產出 **7.872 秒**影片，另以真實 Gradio 操作成功產出 **8.32 秒**影片。M6.2 清晰模式仍需用同一張實機照片做 A/B 品質驗收後才標記完成。
 
 ## 安全與隱私
 
