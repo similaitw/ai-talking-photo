@@ -104,7 +104,6 @@ def generate_talking_video(
                 "GTX 1050 2GB 請改用 Google Colab GPU。"
             )
 
-    # CPU fallback and low-VRAM Wav2Lip use batch size 1 to bound memory usage.
     low_vram = info.low_vram or device == "cpu"
     job_id = uuid4().hex
     job = TEMP_DIR / job_id
@@ -138,8 +137,6 @@ def generate_talking_video(
                 portrait = ImageOps.exif_transpose(opened).convert("RGB")
                 source_size = portrait.size
                 if backend == BACKEND_MUSETALK:
-                    # MuseTalk works on a 256x256 face crop; 1280px preserves a
-                    # clear portrait/background while bounding preprocessing cost.
                     portrait.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
                     quality_mode = "MuseTalk 1.5 高品質模式"
                 elif low_vram:
@@ -183,20 +180,29 @@ def generate_talking_video(
         else:
             if is_video:
                 report(0.45, f"正在用 Wav2Lip 保留原影片動作並產生嘴型同步（{mode}）。")
-            elif face_box is not None:
-                report(0.45, "已用低解析度預覽定位人臉；正在以較高解析度原圖產生並柔和融合嘴型。")
+                raw = generate_lip_sync(
+                    str(prepared),
+                    wav,
+                    str(job / "raw.mp4"),
+                    device,
+                    low_vram=low_vram,
+                    static=False,
+                )
             else:
-                report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
-            raw = generate_lip_sync(
-                str(prepared),
-                wav,
-                str(job / "raw.mp4"),
-                device,
-                low_vram=low_vram,
-                face_box=face_box,
-                soft_blend=bool((not is_video) and low_vram and face_box is not None),
-                static=not is_video,
-            )
+                if face_box is not None:
+                    report(0.45, "已用低解析度預覽定位人臉；正在以較高解析度原圖產生並柔和融合嘴型。")
+                else:
+                    report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
+                # Preserve the historic still-image call shape for compatibility.
+                raw = generate_lip_sync(
+                    str(prepared),
+                    wav,
+                    str(job / "raw.mp4"),
+                    device,
+                    low_vram=low_vram,
+                    face_box=face_box,
+                    soft_blend=bool(low_vram and face_box is not None),
+                )
 
         report(0.82, "正在以高品質 H.264 封裝可播放的 MP4。")
         final = job / "final.mp4"
@@ -230,7 +236,6 @@ def generate_talking_video(
             face_box=face_box,
         )
     except BaseException:
-        # Only remove paths created for this UUID job, never user inputs.
         shutil.rmtree(job, ignore_errors=True)
         destination.unlink(missing_ok=True)
         raise
