@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="$ROOT/.venv-musetalk"
 MUSETALK="$ROOT/vendor/MuseTalk"
 REVISION="0a89dec45a0192b824e3cf4daf96c239440c5ed8"
+CURRENT_STEP="初始化"
+
+on_error() {
+  local status=$?
+  printf '\nMuseTalk 設定失敗。\n' >&2
+  printf '失敗步驟：%s\n' "$CURRENT_STEP" >&2
+  printf '失敗指令：%s\n' "$BASH_COMMAND" >&2
+  printf '結束代碼：%s\n' "$status" >&2
+  exit "$status"
+}
+trap on_error ERR
 
 step() {
+  CURRENT_STEP="$1"
   printf '\n==> %s\n' "$1"
 }
 
@@ -24,10 +36,24 @@ if ! command -v uv >/dev/null; then
 fi
 UV="$(command -v uv)"
 "$UV" python install 3.10
-if [[ ! -x "$VENV/bin/python" ]]; then
-  "$UV" venv --python 3.10 "$VENV"
+
+# uv venv 預設不保證包含 pip。舊版腳本若已留下只有 Python、沒有 pip 的
+# .venv-musetalk，也要能在重跑時自動修復，而不是一直卡在同一個壞環境。
+if [[ ! -x "$VENV/bin/python" ]] || ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+  rm -rf "$VENV"
+  "$UV" venv --python 3.10 --seed "$VENV"
 fi
 PY="$VENV/bin/python"
+
+step "準備相容的 Python 打包工具"
+# MMCV 2.0.1 的 setup.py 仍依賴 pkg_resources；setuptools 82 已移除它。
+# 固定 <82，避免 2026 年新版 setuptools 造成安裝失敗。
+"$PY" -m pip install --upgrade pip "setuptools<82" wheel
+"$PY" - <<'PY'
+import pip
+import setuptools
+print(f"pip: {pip.__version__} | setuptools: {setuptools.__version__}")
+PY
 
 step "取得官方 TMElyralab/MuseTalk"
 mkdir -p "$ROOT/vendor"
@@ -41,7 +67,6 @@ git -C "$MUSETALK" fetch --depth 1 origin "$REVISION"
 git -C "$MUSETALK" checkout --force "$REVISION"
 
 step "安裝 MuseTalk 專用 PyTorch 2.0.1 + CUDA 11.8"
-"$PY" -m pip install --upgrade pip
 "$PY" -m pip install \
   torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 \
   --index-url https://download.pytorch.org/whl/cu118
