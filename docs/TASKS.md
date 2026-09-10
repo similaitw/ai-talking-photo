@@ -141,3 +141,15 @@ M6.4 — MuseTalk 1.5 High Quality Backend
 - 修正 Windows PowerShell 5.1 的 UTF-8 BOM 與 native stderr `UserWarning` 相容性，並讓 GFPGAN setup 自動重新套用 Wav2Lip 嘴周柔和融合 patch。
 - GitHub Actions：123 passed、3 skipped。
 - Windows GTX 1050 2GB 實機已完成 GFPGAN 安裝、權重驗證與端到端影片產生；GFPGAN 定位為清晰度後處理，不視為重新計算或保證改善唇形同步。
+
+## In progress
+
+### M6.4 — MuseTalk 1.5 High Quality Backend
+- 已新增 `talking_photo/musetalk.py`，固定官方 MuseTalk commit `0a89dec45a0192b824e3cf4daf96c239440c5ed8`，以外部 checkout + 獨立 `.venv-musetalk` 執行 v1.5 normal inference。
+- Gradio 已新增「嘴型引擎」切換；Wav2Lip / GFPGAN 既有路徑維持相容，MuseTalk 模式不呼叫 Wav2Lip。
+- MuseTalk 本專案門檻為 CUDA + 至少 4GB VRAM；GTX 1050 2GB 會在 TTS / 推論前停止並提示改用 Google Colab，不會靜默改用 CPU。
+- 預設 MuseTalk v1.5、fp16、25fps、batch size 4，人物照片最長邊 1280 px；wrapper 會額外驗證真實 MP4，避免官方 task 內部 catch 例外後出現假成功。
+- 新增 `scripts/setup_musetalk_colab.sh`、`scripts/download_musetalk_models.py` 與專用 `notebooks/AI_Talking_Photo_MuseTalk_Colab.ipynb`；MuseTalk 使用 Python 3.10 / PyTorch 2.0.1 + CUDA 11.8，主 UI / TTS 使用獨立 Python 3.11。
+- README 與 `docs/MUSETALK.md` 已補上 A/B 測試、硬體、Colab、模型、授權與隱私說明。
+- 程式與 setup 第一輪 GitHub Actions：142 passed、3 skipped；完整文件 / notebook 最終 CI 驗證中。
+- **尚未完成的 acceptance criterion：必須在真正 Google Colab GPU 使用專用 notebook 產出至少一支 MuseTalk 1.5 MP4。完成前不得勾選 M6.4。**
