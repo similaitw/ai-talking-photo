@@ -48,6 +48,9 @@ def test_gfpgan_setup_tolerates_benign_native_stderr_on_windows_powershell_51() 
     assert "2> $stderrPath" in text
     assert "$exitCode = $LASTEXITCODE" in text
     assert "Write-Host $stderrText -ForegroundColor DarkYellow" in text
+    assert '$previousErrorActionPreference = $ErrorActionPreference' in text
+    assert '$ErrorActionPreference = "Continue"' in text
+    assert '$ErrorActionPreference = $previousErrorActionPreference' in text
 
 
 def test_gfpgan_setup_explains_low_vram_profile_in_traditional_chinese() -> None:
