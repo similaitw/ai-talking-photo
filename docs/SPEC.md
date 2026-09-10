@@ -342,3 +342,30 @@ Repository → UI → Validation → TTS → FFmpeg → Wav2Lip → Colab → Wi
 ```
 
 不要一開始同時整合 Wav2Lip + MuseTalk + LivePortrait + EchoMimic。MVP 先確保「照片 + 中文 → 穩定產生 MP4」。
+
+## 28. Post-MVP M6.3 / M6.4 品質擴充
+
+MVP 穩定後，依 GTX 1050 實機品質驗收新增兩段非破壞式擴充：
+
+### M6.3 — Wav2Lip + GFPGAN HD Post-processing
+
+- 保留 Wav2Lip 為 GTX 1050 2GB 快速／低顯存 backend。
+- GFPGAN 為可選後處理，只改善中心人臉清晰度，不宣稱重新計算或修正 lip-sync。
+- GFPGAN 使用獨立 `.venv-gfpgan` 與外部 `vendor/GFPGAN`，不得污染主 `.venv`。
+- GTX 1050 預設 `upscale=1`、中心人臉、不使用 Real-ESRGAN 背景放大。
+
+### M6.4 — MuseTalk 1.5 High Quality Backend
+
+- Gradio 新增 `嘴型引擎`：`Wav2Lip（快速／低顯存）` 與 `MuseTalk 1.5（高品質／建議 Colab）`。
+- MuseTalk 1.5 是獨立 backend；選 MuseTalk 時不得呼叫 Wav2Lip。
+- MuseTalk 使用外部 `vendor/MuseTalk` 與獨立 `.venv-musetalk`，固定官方 commit `0a89dec45a0192b824e3cf4daf96c239440c5ed8`。
+- MuseTalk 環境固定 Python 3.10、PyTorch 2.0.1 / torchvision 0.15.2 / torchaudio 2.0.2 + CUDA 11.8，依官方建議安裝 MMLab 套件。
+- 推論固定 `version=v15`、`use_float16=True`、25fps；初始保守 `batch_size=4`。
+- 本專案 MuseTalk 執行門檻為 CUDA 且 VRAM >= 4GB。GTX 1050 2GB 必須在 TTS／推論前停止並提示使用 Colab；不得靜默 CPU fallback。
+- 單張人物照片送入 MuseTalk 前最長邊限制 1280 px；MuseTalk 本身處理 256×256 臉部區域。
+- 官方 inference 對 task 內部例外可能自行捕捉，因此 wrapper 除了檢查 exit code，必須驗證預期 MP4 真正存在且非空白。
+- 建立 `notebooks/AI_Talking_Photo_MuseTalk_Colab.ipynb`，可 Run All：檢查 GPU → 更新專案 → 建主 Python 3.11 UI/TTS 環境 → 建 MuseTalk Python 3.10 環境 → 下載模型 → 啟動 `share=True` Gradio。
+- MuseTalk notebook 預設嘴型引擎為 MuseTalk；第一次 A/B 測試 GFPGAN 預設關閉，以隔離嘴型引擎差異。
+- `.venv-musetalk`、MuseTalk checkout、模型、使用者照片、語音、影片與暫存資料不得進 Git。
+- CI 只做 wrapper、參數、錯誤處理、notebook / setup 靜態驗證，不下載模型、不假裝完成 GPU inference。
+- M6.4 只有在真正 Colab GPU 完成至少一支 MuseTalk 1.5 端到端影片後，才可在 `docs/TASKS.md` 勾選完成。
