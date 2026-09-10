@@ -2,7 +2,7 @@
 
 ## Current task
 
-M5.2 — Colab Documentation
+M6.1 — Windows Setup
 
 ## Milestones
 
@@ -17,7 +17,7 @@ M5.2 — Colab Documentation
 - [x] M4.1 Wav2Lip Wrapper
 - [x] M4.2 End-to-End Talking Photo
 - [x] M5.1 Colab Notebook
-- [ ] M5.2 Colab Documentation
+- [x] M5.2 Colab Documentation
 - [ ] M6.1 Windows Setup
 - [ ] M6.2 GTX 1050 Low VRAM
 - [ ] M7 UX Polish
@@ -104,4 +104,12 @@ M5.2 — Colab Documentation
 - Notebook 不依賴 Colab 預裝 Python 版本，降低預設 runtime 從 Python 3.12 升級至 3.13 後的相容性風險。
 - Wav2Lip 固定官方 commit `bac9a81e63ecc153202353372e5724b83d9e6322`，沿用官方 GAN／S3FD 下載來源與既有 SHA-256 驗證／格式轉換流程；不提交第三方原始碼、模型或輸出影音。
 - 新增 3 項 notebook 靜態測試，驗證合法 nbformat、GPU metadata、乾淨輸出、完整 Run All bootstrap 關鍵步驟，以及未嵌入 token／API key／密碼。
-- 本地 focused tests：3 passed；完整測試交由 GitHub Actions 驗收。M5.2 將補齊 Colab 使用說明與入口文件。
+- 本地 focused tests：3 passed；GitHub Actions 驗收為 86 passed、3 skipped。M5.2 補齊 Colab 使用說明與入口文件。
+
+### M5.2 — Colab Documentation
+- README 最上方新增 Open in Colab badge，並提供 GPU 執行階段、Run All、Gradio 啟動與輸出保存的最短操作流程。
+- 新增 `docs/COLAB.md`，完整說明第一次執行、輸出位置、重跑方式，以及 GPU、Doctor、模型 SHA、Edge TTS、人臉偵測、CUDA OOM、Gradio share 等常見問題排除。
+- 明確記錄 Colab 免費資源、GPU 型號與執行時間不保證，並依 Google 官方 FAQ 說明免費受管 runtime 以 Web UI 為主要互動時可能提早終止；Gradio share 僅定位為短時間測試入口，不作正式部署。
+- 補充公開 `gradio.live` 網址的隱私風險、暫存檔保存提醒與 Wav2Lip 非商業使用限制。
+- 新增 3 項文件測試，固定 badge、notebook 路徑、Run All 與關鍵限制說明。
+- 本地文件 focused tests：3 passed；GitHub Actions：89 passed、3 skipped。
