@@ -2,7 +2,7 @@
 
 ## Current task
 
-M6.3 — MuseTalk 1.5 High Quality Backend
+M6.3 — Wav2Lip + GFPGAN HD Post-processing
 
 ## Milestones
 
@@ -20,7 +20,8 @@ M6.3 — MuseTalk 1.5 High Quality Backend
 - [x] M5.2 Colab Documentation
 - [x] M6.1 Windows Setup
 - [x] M6.2 GTX 1050 Low VRAM
-- [ ] M6.3 MuseTalk 1.5 High Quality Backend
+- [ ] M6.3 Wav2Lip + GFPGAN HD Post-processing
+- [ ] M6.4 MuseTalk 1.5 High Quality Backend
 - [ ] M7 UX Polish
 
 ## Completed
@@ -131,4 +132,4 @@ M6.3 — MuseTalk 1.5 High Quality Backend
 - 影片封裝採 H.264 CRF 18，降低二次壓縮造成的模糊。
 - GitHub Actions：106 passed、3 skipped。
 - Windows GTX 1050 2GB 實機可成功產生影片；清晰度路徑已改善原先整體模糊問題，但同一張人物照片實測嘴型仍明顯不自然。
-- 結論：2GB 顯存與 Wav2Lip 路線保留為「快速／低顯存」模式，不再投入更多參數微調；高品質嘴型改由 M6.3 MuseTalk 1.5 在 Colab／較大顯存 GPU 路線處理。
+- 結論：2GB 顯存與 Wav2Lip 路線保留為「快速／低顯存」模式；M6.3 先測 GFPGAN 作為高清後處理，若嘴型自然度仍不足，M6.4 再切換 MuseTalk 1.5 高品質 backend。
