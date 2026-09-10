@@ -10,7 +10,14 @@ import gradio as gr
 from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
 from talking_photo.tts import TTSGenerationError, synthesize_speech
 from talking_photo.validation import ValidationError, validate_script
-from talking_photo.pipeline import generate_talking_video, PipelineError
+from talking_photo.pipeline import (
+    ENHANCEMENT_GFPGAN,
+    ENHANCEMENT_NONE,
+    ENHANCEMENT_OPTIONS,
+    generate_talking_video,
+    PipelineError,
+)
+from talking_photo.gfpgan import GFPGANError
 from talking_photo.media import AudioNormalizationError
 from talking_photo.wav2lip import Wav2LipError
 
@@ -50,25 +57,34 @@ def generate_video(
     script: str,
     voice: str,
     rate: float,
+    enhancement: str = ENHANCEMENT_NONE,
     progress=gr.Progress(),
 ) -> tuple[str | None, str | None, str]:
     """Run the real pipeline and update both media previews."""
 
     try:
         result = generate_talking_video(
-            image, script, voice, float(rate),
+            image, script, voice, float(rate), enhancement,
             progress_callback=lambda value, message: progress(value, desc=message),
         )
     except ValueError as exc:
         return None, None, f"輸入有誤：{exc}"
-    except (PipelineError, TTSGenerationError, AudioNormalizationError, Wav2LipError, OSError) as exc:
+    except (
+        PipelineError,
+        TTSGenerationError,
+        AudioNormalizationError,
+        Wav2LipError,
+        GFPGANError,
+        OSError,
+    ) as exc:
         return None, None, f"影片產生失敗：{exc}"
     device_mode = "CPU 備援" if result["device"] == "cpu" else "CUDA"
     quality_mode = result.get("quality_mode", "標準模式")
+    enhancement_mode = result.get("enhancement_mode", "未啟用")
     return (
         result["audio_path"],
         result["video_path"],
-        f"{VIDEO_READY}（{device_mode}／{quality_mode}）",
+        f"{VIDEO_READY}（{device_mode}／{quality_mode}／{enhancement_mode}）",
     )
 
 
@@ -102,6 +118,16 @@ def build_app() -> gr.Blocks:
                     step=0.05,
                     label="語速",
                 )
+                enhancement = gr.Dropdown(
+                    choices=list(ENHANCEMENT_OPTIONS),
+                    value=ENHANCEMENT_NONE,
+                    label="畫質後處理",
+                    info="GFPGAN 可提高臉部清晰度，但不會重新計算嘴型同步。",
+                )
+                gr.Markdown(
+                    "**GFPGAN 高清修復（實驗）**：適合改善 Wav2Lip 臉部模糊；"
+                    "GTX 1050 使用 1× 中心人臉修復，不做背景放大。"
+                )
                 preview_audio = gr.Button("產生語音預覽")
                 generate = gr.Button("產生影片", variant="primary")
 
@@ -123,7 +149,7 @@ def build_app() -> gr.Blocks:
 
         generate.click(
             fn=generate_video,
-            inputs=[portrait, script, voice, rate],
+            inputs=[portrait, script, voice, rate, enhancement],
             outputs=[audio, video, status],
             concurrency_limit=1,
         )
