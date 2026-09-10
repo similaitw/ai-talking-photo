@@ -1,5 +1,6 @@
 .venv/
 .venv-gfpgan/
+.venv-musetalk/
 venv/
 __pycache__/
 *.pyc
@@ -13,6 +14,7 @@ output/*
 !output/.gitkeep
 vendor/Wav2Lip/
 vendor/GFPGAN/
+vendor/MuseTalk/
 *.pth
 *.pt
 *.torchscript
