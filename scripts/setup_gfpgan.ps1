@@ -30,22 +30,42 @@ function Get-CommandPath {
 
 function Invoke-Native {
     param([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage)
-    & $FilePath @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage（結束代碼：$LASTEXITCODE）"
+
+    # Windows PowerShell 5.1 represents native stderr as ErrorRecord objects.
+    # Temporarily avoid Stop semantics and judge failure only by LASTEXITCODE.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        throw "$FailureMessage（結束代碼：$exitCode）"
     }
 }
 
 function Invoke-NativeOutput {
     param([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage)
 
-    # Windows PowerShell 5.1 can turn native stderr redirected with 2>&1 into
-    # NativeCommandError when ErrorActionPreference is Stop. Capture stderr in
-    # a temporary file instead, then decide success only from the real exit code.
+    # PowerShell 5.1 can promote native stderr to NativeCommandError even when
+    # stderr is redirected. Run the native command with Continue semantics,
+    # capture stderr separately, then judge success only from LASTEXITCODE.
     $stderrPath = [System.IO.Path]::GetTempFileName()
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+        $ErrorActionPreference = "Continue"
         $result = & $FilePath @Arguments 2> $stderrPath
         $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    try {
         $stderrText = ""
         if (Test-Path $stderrPath) {
             $stderrText = (Get-Content $stderrPath -Raw -ErrorAction SilentlyContinue)
