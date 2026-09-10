@@ -1,0 +1,7 @@
+gradio
+edge-tts
+numpy
+opencv-python
+Pillow
+soundfile
+pytest
