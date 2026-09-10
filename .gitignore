@@ -1,4 +1,5 @@
 .venv/
+.venv-gfpgan/
 venv/
 __pycache__/
 *.pyc
@@ -11,6 +12,7 @@ temp/*
 output/*
 !output/.gitkeep
 vendor/Wav2Lip/
+vendor/GFPGAN/
 *.pth
 *.pt
 *.torchscript
