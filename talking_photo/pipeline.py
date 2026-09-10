@@ -1,4 +1,4 @@
-"""Photo-to-video orchestration using the existing inference wrapper."""
+"""Photo-to-video orchestration using selectable lip-sync backends."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ from talking_photo.config import TEMP_DIR, OUTPUT_DIR
 from talking_photo.device import get_device_info
 from talking_photo.gfpgan import enhance_video_with_gfpgan
 from talking_photo.media import normalize_audio
+from talking_photo.musetalk import (
+    MIN_MUSETALK_VRAM_GB,
+    generate_musetalk_lip_sync,
+)
 from talking_photo.quality import detect_face_box, limit_low_vram_output
 from talking_photo.tts import synthesize_speech, resolve_voice, format_edge_rate
 from talking_photo.validation import validate_inputs
@@ -24,6 +28,10 @@ from talking_photo.wav2lip import generate_lip_sync
 class PipelineError(RuntimeError):
     """A stage failed without a usable final video."""
 
+
+BACKEND_WAV2LIP = "Wav2Lip（快速／低顯存）"
+BACKEND_MUSETALK = "MuseTalk 1.5（高品質／建議 Colab）"
+BACKEND_OPTIONS = (BACKEND_WAV2LIP, BACKEND_MUSETALK)
 
 ENHANCEMENT_NONE = "關閉（較快）"
 ENHANCEMENT_GFPGAN = "GFPGAN 高清修復（實驗）"
@@ -55,14 +63,14 @@ def generate_talking_video(
     progress_callback: Callable[[float, str], None] | None = None,
     *,
     enhancement: str = ENHANCEMENT_NONE,
+    backend: str = BACKEND_WAV2LIP,
 ) -> dict:
     """Return paths and runtime metadata for one talking-photo job.
 
-    Low-VRAM CUDA first keeps the portrait up to 1280 px and detects a face on a
-    512 px CPU preview. When that succeeds, the mapped fixed box avoids GPU face
-    detection on the large frame and enables lower-face soft blending. GFPGAN
-    can optionally restore the center face after Wav2Lip while keeping the same
-    video dimensions and audio.
+    Wav2Lip remains the fast/low-VRAM path. MuseTalk 1.5 is an explicit CUDA
+    high-quality backend intended for Colab or GPUs with at least 4GB VRAM; it
+    never silently falls back to CPU. GFPGAN can remain an optional final face
+    restoration stage after either backend when its separate environment exists.
     """
     def report(value: float, message: str) -> None:
         if progress_callback is not None:
@@ -70,6 +78,8 @@ def generate_talking_video(
 
     if enhancement not in ENHANCEMENT_OPTIONS:
         raise ValueError("不支援的畫質後處理模式。")
+    if backend not in BACKEND_OPTIONS:
+        raise ValueError("不支援的嘴型引擎。")
 
     report(0, "正在驗證照片與講稿。")
     image, script = validate_inputs(image_path, text)
@@ -82,7 +92,17 @@ def generate_talking_video(
     if info.error:
         raise PipelineError(info.error)
     device = info.device if requested == "auto" else requested
-    # CPU fallback also uses batch size 1 to bound memory usage.
+
+    if backend == BACKEND_MUSETALK:
+        if requested == "cpu" or device == "cpu" or not str(device).startswith("cuda"):
+            raise PipelineError("MuseTalk 1.5 高品質模式需要 CUDA GPU，不會自動改用 CPU。請使用 Google Colab GPU。")
+        if info.vram_gb is None or info.vram_gb < MIN_MUSETALK_VRAM_GB:
+            raise PipelineError(
+                f"MuseTalk 1.5 高品質模式在本專案要求至少 {MIN_MUSETALK_VRAM_GB:g}GB 顯示記憶體；"
+                "GTX 1050 2GB 請改用 Google Colab GPU。"
+            )
+
+    # CPU fallback and low-VRAM Wav2Lip use batch size 1 to bound memory usage.
     low_vram = info.low_vram or device == "cpu"
     job_id = uuid4().hex
     job = TEMP_DIR / job_id
@@ -92,6 +112,7 @@ def generate_talking_video(
     source_size: tuple[int, int] | None = None
     prepared_size: tuple[int, int] | None = None
     enhancement_mode = "未啟用"
+    backend_mode = backend
     try:
         job.mkdir(parents=True)
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -99,7 +120,12 @@ def generate_talking_video(
         with Image.open(image) as opened:
             portrait = ImageOps.exif_transpose(opened).convert("RGB")
             source_size = portrait.size
-            if low_vram:
+            if backend == BACKEND_MUSETALK:
+                # MuseTalk works on a 256x256 face crop; 1280px preserves a clear
+                # portrait/background while bounding DWPose and frame I/O cost.
+                portrait.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+                quality_mode = "MuseTalk 1.5 高品質模式"
+            elif low_vram:
                 portrait = limit_low_vram_output(portrait)
                 face_box = detect_face_box(portrait)
                 if face_box is not None:
@@ -110,29 +136,45 @@ def generate_talking_video(
             prepared_size = portrait.size
             portrait.save(prepared, compress_level=2)
 
-        if device == "cpu":
+        if backend == BACKEND_MUSETALK:
+            mode = "CUDA／MuseTalk 1.5 高品質模式"
+        elif device == "cpu":
             mode = f"CPU 備援／{quality_mode}，可能需要較長時間"
         elif low_vram:
             mode = f"CUDA／{quality_mode}"
         else:
             mode = "CUDA／標準模式"
+
         report(0.1, f"正在產生台灣中文語音；推論將使用 {mode}。")
         audio = synthesize_speech(script, voice, rate, str(job / "speech.mp3"))
         report(0.3, "正在轉換為 16 kHz 單聲道 PCM WAV。")
         wav = normalize_audio(audio, str(job / "speech.wav"))
-        if face_box is not None:
-            report(0.45, "已用低解析度預覽定位人臉；正在以較高解析度原圖產生並柔和融合嘴型。")
+
+        if backend == BACKEND_MUSETALK:
+            report(0.45, "正在使用 MuseTalk 1.5 高品質模式產生自然嘴型；建議在 Colab GPU 執行。")
+            raw = generate_musetalk_lip_sync(
+                str(prepared),
+                wav,
+                str(job / "raw.mp4"),
+                use_float16=True,
+                batch_size=4,
+                fps=25,
+            )
         else:
-            report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
-        raw = generate_lip_sync(
-            str(prepared),
-            wav,
-            str(job / "raw.mp4"),
-            device,
-            low_vram=low_vram,
-            face_box=face_box,
-            soft_blend=bool(low_vram and face_box is not None),
-        )
+            if face_box is not None:
+                report(0.45, "已用低解析度預覽定位人臉；正在以較高解析度原圖產生並柔和融合嘴型。")
+            else:
+                report(0.45, f"正在使用 Wav2Lip 產生嘴型同步影片（{mode}）。")
+            raw = generate_lip_sync(
+                str(prepared),
+                wav,
+                str(job / "raw.mp4"),
+                device,
+                low_vram=low_vram,
+                face_box=face_box,
+                soft_blend=bool(low_vram and face_box is not None),
+            )
+
         report(0.82, "正在以高品質 H.264 封裝可播放的 MP4。")
         final = job / "final.mp4"
         finalize_video(Path(raw), final)
@@ -155,6 +197,7 @@ def generate_talking_video(
             device=device,
             gpu_name=info.gpu_name,
             low_vram=low_vram,
+            backend=backend_mode,
             quality_mode=quality_mode,
             enhancement_mode=enhancement_mode,
             source_size=source_size,
