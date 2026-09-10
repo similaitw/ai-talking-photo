@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +12,9 @@ from talking_photo.config import APP_NAME, DEFAULT_RATE, DEFAULT_VOICE
 from talking_photo.tts import TTSGenerationError, synthesize_speech
 from talking_photo.validation import ValidationError, validate_script
 from talking_photo.pipeline import (
+    BACKEND_MUSETALK,
+    BACKEND_OPTIONS,
+    BACKEND_WAV2LIP,
     ENHANCEMENT_NONE,
     ENHANCEMENT_OPTIONS,
     generate_talking_video,
@@ -18,11 +22,16 @@ from talking_photo.pipeline import (
 )
 from talking_photo.gfpgan import GFPGANError
 from talking_photo.media import AudioNormalizationError
+from talking_photo.musetalk import MuseTalkError
 from talking_photo.wav2lip import Wav2LipError
 
 VIDEO_READY = "影片已產生，可播放或下載語音與影片。"
 AUDIO_PREVIEW_READY = "語音預覽已產生，可先播放確認聲音與語速。"
 AUDIO_PREVIEW_DIR = Path("temp") / "audio-preview"
+
+
+def _default_backend() -> str:
+    return BACKEND_MUSETALK if os.environ.get("TALKING_PHOTO_DEFAULT_BACKEND", "").lower() == "musetalk" else BACKEND_WAV2LIP
 
 
 def generate_audio_preview(
@@ -57,6 +66,7 @@ def generate_video(
     voice: str,
     rate: float,
     enhancement: str = ENHANCEMENT_NONE,
+    backend: str = BACKEND_WAV2LIP,
     progress=gr.Progress(),
 ) -> tuple[str | None, str | None, str]:
     """Run the real pipeline and update both media previews."""
@@ -69,6 +79,7 @@ def generate_video(
             float(rate),
             progress_callback=lambda value, message: progress(value, desc=message),
             enhancement=enhancement,
+            backend=backend,
         )
     except ValueError as exc:
         return None, None, f"輸入有誤：{exc}"
@@ -77,17 +88,19 @@ def generate_video(
         TTSGenerationError,
         AudioNormalizationError,
         Wav2LipError,
+        MuseTalkError,
         GFPGANError,
         OSError,
     ) as exc:
         return None, None, f"影片產生失敗：{exc}"
     device_mode = "CPU 備援" if result["device"] == "cpu" else "CUDA"
+    backend_mode = result.get("backend", BACKEND_WAV2LIP)
     quality_mode = result.get("quality_mode", "標準模式")
     enhancement_mode = result.get("enhancement_mode", "未啟用")
     return (
         result["audio_path"],
         result["video_path"],
-        f"{VIDEO_READY}（{device_mode}／{quality_mode}／{enhancement_mode}）",
+        f"{VIDEO_READY}（{device_mode}／{backend_mode}／{quality_mode}／{enhancement_mode}）",
     )
 
 
@@ -121,6 +134,12 @@ def build_app() -> gr.Blocks:
                     step=0.05,
                     label="語速",
                 )
+                backend = gr.Dropdown(
+                    choices=list(BACKEND_OPTIONS),
+                    value=_default_backend(),
+                    label="嘴型引擎",
+                    info="GTX 1050 2GB 請用 Wav2Lip；MuseTalk 1.5 高品質模式建議使用 Google Colab GPU。",
+                )
                 enhancement = gr.Dropdown(
                     choices=list(ENHANCEMENT_OPTIONS),
                     value=ENHANCEMENT_NONE,
@@ -128,8 +147,9 @@ def build_app() -> gr.Blocks:
                     info="GFPGAN 可提高臉部清晰度，但不會重新計算嘴型同步。",
                 )
                 gr.Markdown(
-                    "**GFPGAN 高清修復（實驗）**：適合改善 Wav2Lip 臉部模糊；"
-                    "GTX 1050 使用 1× 中心人臉修復，不做背景放大。"
+                    "**Wav2Lip**：速度快、GTX 1050 2GB 可用。  \n"
+                    "**MuseTalk 1.5**：嘴型自然度優先，至少需 4GB 顯示記憶體，本專案建議 Colab。  \n"
+                    "**GFPGAN 高清修復（實驗）**：只做臉部清晰度後處理，不取代嘴型引擎。"
                 )
                 preview_audio = gr.Button("產生語音預覽")
                 generate = gr.Button("產生影片", variant="primary")
@@ -152,7 +172,9 @@ def build_app() -> gr.Blocks:
 
         generate.click(
             fn=generate_video,
-            inputs=[portrait, script, voice, rate, enhancement],
+            # Preserve the existing enhancement positional argument and add the
+            # backend after it; visual component order remains independent.
+            inputs=[portrait, script, voice, rate, enhancement, backend],
             outputs=[audio, video, status],
             concurrency_limit=1,
         )
