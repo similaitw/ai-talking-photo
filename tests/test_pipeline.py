@@ -71,6 +71,7 @@ def test_pipeline_order_unique_jobs_and_cleanup(stages):
     assert calls == ["tts", "normalize", "infer", "finalize"] * 2
     assert first["job_id"] != second["job_id"]
     assert first["device"] == "cuda:0" and first["low_vram"]
+    assert first["backend"] == pipeline.BACKEND_WAV2LIP
     assert first["quality_mode"] == "低顯示記憶體清晰模式"
     assert first["enhancement_mode"] == "未啟用"
     assert first["source_size"] == (1024, 768)
@@ -108,6 +109,15 @@ def test_invalid_enhancement_fails_before_work(stages):
     with pytest.raises(ValueError, match="畫質後處理"):
         pipeline.generate_talking_video(
             str(image), "大家好。", "台灣女聲", 1, enhancement="unknown"
+        )
+    assert calls == []
+
+
+def test_invalid_backend_fails_before_work(stages):
+    image, calls = stages
+    with pytest.raises(ValueError, match="嘴型引擎"):
+        pipeline.generate_talking_video(
+            str(image), "大家好。", "台灣女聲", 1, backend="unknown"
         )
     assert calls == []
 
@@ -209,6 +219,75 @@ def test_device_errors_do_not_fallback(stages, monkeypatch):
     with pytest.raises(pipeline.PipelineError, match="CUDA 偵測失敗"):
         pipeline.generate_talking_video(str(stages[0]), "大家好。", "台灣女聲", 1)
     assert stages[1] == []
+
+
+def test_musetalk_rejects_gtx1050_before_tts_or_inference(stages, monkeypatch):
+    image, calls = stages
+    musetalk_calls = []
+    monkeypatch.setattr(
+        pipeline,
+        "generate_musetalk_lip_sync",
+        lambda *args, **kwargs: musetalk_calls.append(1),
+    )
+    with pytest.raises(pipeline.PipelineError, match="至少 4GB"):
+        pipeline.generate_talking_video(
+            str(image), "大家好。", "台灣女聲", 1,
+            backend=pipeline.BACKEND_MUSETALK,
+        )
+    assert calls == []
+    assert musetalk_calls == []
+
+
+def test_musetalk_uses_only_high_quality_backend_on_large_cuda_gpu(tmp_path, monkeypatch):
+    monkeypatch.delenv("TALKING_PHOTO_DEVICE", raising=False)
+    monkeypatch.setattr(pipeline, "TEMP_DIR", tmp_path / "temp")
+    monkeypatch.setattr(pipeline, "OUTPUT_DIR", tmp_path / "output")
+    monkeypatch.setattr(pipeline, "get_device_info", lambda: DeviceInfo(
+        device="cuda:0", gpu_name="Tesla T4", vram_gb=15, low_vram=False, torch_version="test"))
+    calls = []
+
+    def tts(text, voice, rate, output):
+        calls.append("tts")
+        Path(output).write_bytes(b"mp3")
+        return output
+
+    def normalize(source, output):
+        calls.append("normalize")
+        Path(output).write_bytes(b"wav")
+        return output
+
+    def musetalk_infer(image, audio, output, **kwargs):
+        calls.append("musetalk")
+        assert kwargs == {"use_float16": True, "batch_size": 4, "fps": 25}
+        with Image.open(image) as portrait:
+            assert portrait.size == (1280, 960)
+        Path(output).write_bytes(b"raw-musetalk")
+        return output
+
+    def wav2lip_fail(*args, **kwargs):
+        raise AssertionError("MuseTalk 模式不可呼叫 Wav2Lip")
+
+    monkeypatch.setattr(pipeline, "synthesize_speech", tts)
+    monkeypatch.setattr(pipeline, "normalize_audio", normalize)
+    monkeypatch.setattr(pipeline, "generate_musetalk_lip_sync", musetalk_infer)
+    monkeypatch.setattr(pipeline, "generate_lip_sync", wav2lip_fail)
+    monkeypatch.setattr(
+        pipeline, "finalize_video",
+        lambda source, output: (calls.append("finalize"), output.write_bytes(b"final")),
+    )
+    image = tmp_path / "large.png"
+    Image.new("RGB", (4000, 3000)).save(image)
+
+    result = pipeline.generate_talking_video(
+        str(image), "大家好。", "台灣女聲", 1,
+        backend=pipeline.BACKEND_MUSETALK,
+    )
+    assert calls == ["tts", "normalize", "musetalk", "finalize"]
+    assert result["backend"] == pipeline.BACKEND_MUSETALK
+    assert result["quality_mode"] == "MuseTalk 1.5 高品質模式"
+    assert result["prepared_size"] == (1280, 960)
+    assert result["face_box"] is None
+    assert Path(result["video_path"]).read_bytes() == b"final"
 
 
 def test_finalize_requires_audio_browser_codecs_and_high_quality_h264(tmp_path, monkeypatch):
