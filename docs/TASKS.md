@@ -2,13 +2,13 @@
 
 ## Current task
 
-M1.1 — Gradio Shell
+M1.2 — Validation
 
 ## Milestones
 
 - [x] M0.1 Repository Bootstrap
 - [x] M0.2 Agent / Spec / Tasks
-- [ ] M1.1 Gradio Shell
+- [x] M1.1 Gradio Shell
 - [ ] M1.2 Validation
 - [ ] M2.1 Edge TTS
 - [ ] M2.2 Audio Preview
@@ -32,3 +32,9 @@ M1.1 — Gradio Shell
 ### M0.2 — Agent / Spec / Tasks
 - Added `AGENTS.md`, `docs/SPEC.md`, and this task tracker.
 - Established GitHub as the project source of truth.
+
+### M1.1 — Gradio Shell
+- Added a Traditional Chinese single-page Gradio interface.
+- Added portrait, script, voice, speed, audio preview, and video preview components.
+- Generate action explicitly returns `Pipeline 尚未啟用` until the real pipeline is connected.
+- Verified `python -m pytest`: 4 passed.
