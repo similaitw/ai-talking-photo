@@ -52,6 +52,29 @@ def test_low_vram_command_uses_safe_batch_sizes(tmp_path: Path) -> None:
     assert command[start : start + 2] == ["--static", "True"]
 
 
+def test_quality_command_uses_fixed_box_and_soft_blend(tmp_path: Path) -> None:
+    command = wav2lip._build_command(
+        tmp_path / "inference.py",
+        tmp_path / "model.pth",
+        tmp_path / "face.png",
+        tmp_path / "audio.wav",
+        tmp_path / "out.mp4",
+        low_vram=True,
+        face_box=(20, 220, 30, 210),
+        soft_blend=True,
+    )
+    index = command.index("--box")
+    assert command[index : index + 5] == ["--box", "20", "220", "30", "210"]
+    assert "--soft_blend" in command
+
+
+def test_invalid_face_box_is_rejected() -> None:
+    with pytest.raises(ValueError, match="face_box"):
+        wav2lip._validate_face_box((10, 5, 0, 20))
+    with pytest.raises(ValueError, match="face_box"):
+        wav2lip._validate_face_box((-1, 20, 0, 20))
+
+
 def test_normal_command_does_not_force_low_vram_flags(tmp_path: Path) -> None:
     command = wav2lip._build_command(
         tmp_path / "inference.py",
@@ -63,6 +86,8 @@ def test_normal_command_does_not_force_low_vram_flags(tmp_path: Path) -> None:
     )
     assert "--wav2lip_batch_size" not in command
     assert "--resize_factor" not in command
+    assert "--box" not in command
+    assert "--soft_blend" not in command
 
 
 @pytest.mark.parametrize("device", ["gpu", "cuda:x", "cuda:-1"])
@@ -208,6 +233,24 @@ def test_face_detection_failure_gets_specific_message(
     monkeypatch.setattr(wav2lip.subprocess, "run", fake_run)
     with pytest.raises(Wav2LipError, match="找不到可用的人臉"):
         generate_lip_sync(str(image), str(audio), str(output), "cpu")
+
+
+def test_old_unpatched_runtime_gets_prepare_hint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image, audio, output, _ = prepare_runtime(tmp_path, monkeypatch)
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        raise subprocess.CalledProcessError(
+            2, command, stderr="error: unrecognized arguments: --soft_blend"
+        )
+
+    monkeypatch.setattr(wav2lip.subprocess, "run", fake_run)
+    with pytest.raises(Wav2LipError, match="prepare_wav2lip.py"):
+        generate_lip_sync(
+            str(image), str(audio), str(output), "cpu", soft_blend=True
+        )
 
 
 def test_success_requires_nonempty_mp4(
