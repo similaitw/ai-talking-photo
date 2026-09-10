@@ -10,6 +10,7 @@ from app import (
     generate_audio_preview,
     generate_video,
 )
+from talking_photo.pipeline import ENHANCEMENT_GFPGAN, ENHANCEMENT_NONE
 from talking_photo.tts import TTSGenerationError
 
 
@@ -28,6 +29,7 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
         video_path="real.mp4",
         device="cuda:0",
         quality_mode="低顯示記憶體清晰模式",
+        enhancement_mode="未啟用",
     )
     with patch("app.generate_talking_video", return_value=result) as pipeline:
         audio, video, status = generate_video(str(portrait), "測試", "台灣女聲", 0.95)
@@ -36,7 +38,26 @@ def test_video_returns_both_previews_after_success(tmp_path: Path) -> None:
     assert VIDEO_READY in status
     assert "CUDA" in status
     assert "低顯示記憶體清晰模式" in status
+    assert "未啟用" in status
     assert pipeline.call_args.args == (str(portrait), "測試", "台灣女聲", 0.95)
+    assert pipeline.call_args.kwargs["enhancement"] == ENHANCEMENT_NONE
+
+
+def test_video_passes_gfpgan_selection() -> None:
+    result = dict(
+        audio_path="speech.mp3",
+        video_path="enhanced.mp4",
+        device="cuda:0",
+        quality_mode="低顯示記憶體清晰模式",
+        enhancement_mode="GFPGAN V1.3 高清修復",
+    )
+    with patch("app.generate_talking_video", return_value=result) as pipeline:
+        _, video, status = generate_video(
+            "portrait.png", "測試", "台灣女聲", 1, ENHANCEMENT_GFPGAN
+        )
+    assert video == "enhanced.mp4"
+    assert "GFPGAN V1.3" in status
+    assert pipeline.call_args.kwargs["enhancement"] == ENHANCEMENT_GFPGAN
 
 
 def test_video_reports_oom_and_clears_stale_previews() -> None:
@@ -100,7 +121,9 @@ def test_gradio_shell_contains_required_components() -> None:
     }
 
     assert {"image", "textbox", "dropdown", "slider", "audio", "video"} <= component_types
-    assert {"人物照片", "講稿", "聲音", "語速", "語音預覽", "影片預覽"} <= labels
+    assert {
+        "人物照片", "講稿", "聲音", "語速", "畫質後處理", "語音預覽", "影片預覽"
+    } <= labels
     assert {"產生語音預覽", "產生影片"} <= button_values
     video_event = next(fn for fn in demo.fns.values() if fn.fn == generate_video)
     assert [component.get_block_name() for component in video_event.outputs] == ["audio", "video", "markdown"]
