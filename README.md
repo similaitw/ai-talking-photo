@@ -3,17 +3,28 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/similaitw/ai-talking-photo/blob/main/notebooks/AI_Talking_Photo_Colab.ipynb)
 [![MuseTalk 1.5 High Quality Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/similaitw/ai-talking-photo/blob/main/notebooks/AI_Talking_Photo_MuseTalk_Colab.ipynb)
 
-單張人物照片 + 繁體中文講稿 → AI 說話影片。
+人物照片或影片 + 繁體中文講稿 → AI 說話影片。
 
 目前提供兩種嘴型引擎與一種可選畫質後處理：
 
 | 模式 | 建議環境 | 定位 |
 | --- | --- | --- |
-| **Wav2Lip** | GTX 1050 2GB / Windows / Colab | 快速、低顯存 |
+| **Wav2Lip** | GTX 1050 2GB / Windows / Colab | 快速、低顯存；照片與影片皆可 |
 | **Wav2Lip + GFPGAN** | GTX 1050 2GB / Windows | Wav2Lip 後再修復臉部清晰度 |
-| **MuseTalk 1.5** | Google Colab GPU / >= 4GB VRAM | 嘴型自然度與高品質優先 |
+| **MuseTalk 1.5** | Google Colab GPU / >= 4GB VRAM | 嘴型自然度與高品質優先；影片輸入最值得優先測試 |
 
 GTX 1050 2GB 本機請使用 Wav2Lip；MuseTalk 1.5 高品質模式不會靜默改跑 CPU，本專案建議使用 Google Colab GPU。
+
+## 人物素材：照片或影片
+
+Gradio 的「人物素材（照片或影片）」可接受：
+
+- 圖片：JPG / JPEG / PNG / WebP
+- 影片：MP4 / MOV / WebM / MKV
+
+影片輸入會保留原本的眨眼、頭部與身體微動，通常比單張照片更有自然感。原影片音訊不會保留，最後會由新的 Edge TTS 語音取代。
+
+建議的自然待機影片為 **5～10 秒**：正面或小角度、光線穩定、嘴部不遮擋，可自然眨眼、微點頭或有輕微呼吸感。不要大幅轉頭或做劇烈動作。若新語音比素材影片長，Wav2Lip 會循環來源幀；MuseTalk 官方 normal inference 會以正放＋倒放的幀序列延展，因此動作越小，循環接點越不明顯。
 
 ## 最快開始：Google Colab
 
@@ -24,7 +35,7 @@ GTX 1050 2GB 本機請使用 Wav2Lip；MuseTalk 1.5 高品質模式不會靜默�
 1. 在 Colab 選擇「執行階段 → 變更執行階段類型 → GPU」。
 2. 選擇「執行階段 → 全部執行」。
 3. 等待環境、Wav2Lip 與模型準備完成，Doctor 通過後會啟動 Gradio。
-4. 開啟輸出中的 `gradio.live` 網址，上傳有權使用的人像、輸入繁體中文講稿，再按「產生影片」。
+4. 開啟輸出中的 `gradio.live` 網址，上傳有權使用的人物照片或影片、輸入繁體中文講稿，再按「產生影片」。
 5. 影片完成後請下載保存；Colab 工作階段結束後暫存檔可能消失。
 
 完整 Wav2Lip Colab 操作與排錯：[`docs/COLAB.md`](docs/COLAB.md)。
@@ -37,7 +48,7 @@ GTX 1050 2GB 本機請使用 Wav2Lip；MuseTalk 1.5 高品質模式不會靜默�
 
 專用 notebook 會建立主程式 Python 3.11 環境，以及獨立的 MuseTalk Python 3.10 `.venv-musetalk`，固定官方 MuseTalk 版本、安裝相依套件與下載 1.5 推論模型，最後以 `share=True` 啟動 Gradio，預設選擇 MuseTalk 1.5。
 
-第一次 A/B 測試建議把「畫質後處理」保持 **關閉（較快）**，只比較 MuseTalk 與 Wav2Lip 的嘴型差異。
+第一次 A/B 測試建議使用同一支 5～10 秒自然待機人物影片、相同講稿／聲音／語速，並把「畫質後處理」保持 **關閉（較快）**，只比較 MuseTalk 與 Wav2Lip 的嘴型與整體自然度。
 
 完整 MuseTalk 操作、硬體、模型與授權說明：[`docs/MUSETALK.md`](docs/MUSETALK.md)。
 
@@ -73,16 +84,24 @@ python app.py
 
 ## GTX 1050 2GB 清晰模式
 
-Wav2Lip 的低顯存路徑已針對 GTX 1050 2GB 調整：
+Wav2Lip 的低顯存路徑已針對 GTX 1050 2GB 調整。
+
+照片輸入：
 
 1. 人物照片最多保留到長邊 **1280 px**，不再整張強制縮成 512 px。
 2. 用低解析度 CPU 預覽做人臉定位，再把臉框映射回較高清照片。
 3. 使用固定 `--box` 避免大圖 GPU 人臉偵測。
 4. `wav2lip_batch_size=1`、`face_det_batch_size=1`。
 5. 可選嘴周柔和融合，保留眼睛、額頭與大部分原始臉部細節。
-6. 最終 MP4 採 H.264 CRF 18，減少二次壓縮損失。
 
-如果預覽找不到臉，會退回 512 px 相容模式；CUDA OOM 不會無提示轉成長時間 CPU 推論。
+影片輸入：
+
+1. 不加 `--static`，保留來源影片逐幀的眨眼、頭部與身體動作。
+2. 低顯存 batch size 仍維持 1。
+3. 不套用照片專用固定臉框與靜態嘴周融合，避免把動態人臉鎖死在單一座標。
+4. 原影片聲音會由新 TTS 語音取代。
+
+最終 MP4 採 H.264 CRF 18，減少二次壓縮損失。照片預覽找不到臉時會退回 512 px 相容模式；CUDA OOM 不會無提示轉成長時間 CPU 推論。
 
 舊版環境更新後可重新套用 patch：
 
@@ -128,9 +147,9 @@ vendor/MuseTalk/
 
 - MuseTalk `v15`
 - `use_float16=True`
-- `fps=25`
 - `batch_size=4`
-- 人物照片長邊最多 1280 px
+- 單張人物照片長邊最多 1280 px；照片模式使用 `fps=25`
+- 影片輸入保留原始容器副檔名交由官方 inference 拆幀，並使用來源影片 FPS
 - 需求至少 4GB VRAM；GTX 1050 2GB 直接提示改用 Colab
 - 不允許自動 CPU fallback
 - wrapper 除了 subprocess exit code，還會驗證真正的 MP4 是否存在且非空白
@@ -141,8 +160,8 @@ vendor/MuseTalk/
 
 ## 目前可用功能
 
-- 上傳人物照片與繁體中文講稿
-- 圖片與講稿輸入驗證
+- 上傳人物照片或影片與繁體中文講稿
+- 圖片／影片與講稿輸入驗證
 - 台灣中文 Edge TTS
   - 台灣女聲：`zh-TW-HsiaoChenNeural`
   - 台灣男聲：`zh-TW-YunJheNeural`
@@ -150,6 +169,8 @@ vendor/MuseTalk/
 - 獨立語音預覽
 - FFmpeg 16 kHz / mono / PCM 音訊正規化
 - 「嘴型引擎」切換：Wav2Lip / MuseTalk 1.5
+- Wav2Lip 照片與影片輸入
+- MuseTalk 1.5 照片與影片輸入
 - GTX 1050 2GB Wav2Lip 清晰／低顯存模式
 - 可選 GFPGAN V1.3 中心人臉高清後處理
 - Wav2Lip Run All Colab notebook
@@ -190,7 +211,7 @@ Doctor 主要診斷主 Wav2Lip 環境。MuseTalk 高品質模式由專用 Colab 
 
 ## 已驗證的本機路線
 
-2026-09-10～11 已在 Windows、GTX 1050 2GB 完成 Wav2Lip 清晰模式與 GFPGAN V1.3 端到端影片實機驗證。MuseTalk 1.5 的程式、wrapper、VRAM guard、Colab setup 與自動測試已加入，但在真正 Colab GPU 的端到端影片驗證完成前，不宣稱 M6.4 已實機驗收。
+2026-09-10～11 已在 Windows、GTX 1050 2GB 完成 Wav2Lip 清晰模式與 GFPGAN V1.3 端到端影片實機驗證。照片／影片雙輸入、MuseTalk 1.5 wrapper、VRAM guard、Colab setup 與自動測試已加入；在真正 Colab GPU 以影片輸入完成 MuseTalk 1.5 端到端驗證前，不宣稱 M6.4 已實機驗收。
 
 ## 安全與隱私
 
