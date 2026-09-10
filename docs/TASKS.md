@@ -2,7 +2,7 @@
 
 ## Current task
 
-M6.1 — Windows Setup
+M6.2 — GTX 1050 Low VRAM
 
 ## Milestones
 
@@ -18,7 +18,7 @@ M6.1 — Windows Setup
 - [x] M4.2 End-to-End Talking Photo
 - [x] M5.1 Colab Notebook
 - [x] M5.2 Colab Documentation
-- [ ] M6.1 Windows Setup
+- [x] M6.1 Windows Setup
 - [ ] M6.2 GTX 1050 Low VRAM
 - [ ] M7 UX Polish
 
@@ -113,3 +113,12 @@ M6.1 — Windows Setup
 - 補充公開 `gradio.live` 網址的隱私風險、暫存檔保存提醒與 Wav2Lip 非商業使用限制。
 - 新增 3 項文件測試，固定 badge、notebook 路徑、Run All 與關鍵限制說明。
 - 本地文件 focused tests：3 passed；GitHub Actions：89 passed、3 skipped。
+
+### M6.1 — Windows Setup
+- 新增 `scripts/setup_windows.ps1`，從腳本位置自動解析專案根目錄，支援任意磁碟機、空白與中文路徑。
+- 檢查 Git、Python 3.11、FFmpeg 與 NVIDIA GPU／驅動資訊；不會自動安裝或更新 NVIDIA 驅動程式。
+- 建立或安全沿用 Python 3.11 `.venv`，安裝已驗證的 PyTorch 2.5.1+cu118 與固定 Wav2Lip 相依套件。
+- 可重複準備官方 Wav2Lip checkout、GAN 與 S3FD 權重，並執行 `prepare_wav2lip.py` 與 Doctor；模型與第三方程式仍不納入 Git。
+- 新增 6 項 Windows setup 測試，涵蓋路徑無關、固定版本、重跑安全性、繁中提示與 PowerShell AST 語法解析。
+- GitHub Actions：95 passed、3 skipped。
+- Windows 實機驗證：`H:\AI_Project\ai-talking-photo` 的 Python 3.11 `.venv` 可成功啟動 Gradio；因本機 7860 已被占用，Gradio 自動改用 `http://127.0.0.1:7861`，屬正常行為。
