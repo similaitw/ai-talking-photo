@@ -89,13 +89,14 @@ def _validate_face_box(
 def _build_command(
     inference_script: Path,
     checkpoint: Path,
-    image: Path,
+    source: Path,
     audio: Path,
     output: Path,
     *,
     low_vram: bool,
     face_box: tuple[int, int, int, int] | None = None,
     soft_blend: bool = False,
+    static: bool = True,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -103,14 +104,14 @@ def _build_command(
         "--checkpoint_path",
         str(checkpoint),
         "--face",
-        str(image),
+        str(source),
         "--audio",
         str(audio),
         "--outfile",
         str(output),
-        "--static",
-        "True",
     ]
+    if static:
+        command.extend(["--static", "True"])
     if face_box is not None:
         command.extend(["--box", *(str(value) for value in face_box)])
     if soft_blend:
@@ -133,11 +134,11 @@ def _friendly_failure(output: str) -> str:
     lowered = output.lower()
     if "out of memory" in lowered or "image too big to run face detection on gpu" in lowered:
         return (
-            "CUDA 顯示記憶體不足（GTX 1050 2GB 容量有限）。建議使用 Google Colab GPU、降低圖片解析度，"
+            "CUDA 顯示記憶體不足（GTX 1050 2GB 容量有限）。建議使用 Google Colab GPU、降低人物素材解析度，"
             "或縮短單段音訊；系統不會自動改用 CPU。"
         )
     if "face not detected" in lowered or "face not found" in lowered:
-        return "找不到可用的人臉，請改用正面、清楚且嘴部未遮擋的照片。"
+        return "找不到可用的人臉，請改用正面、清楚且嘴部未遮擋的照片或影片。"
     if "unrecognized arguments: --soft_blend" in lowered:
         return (
             "目前 Wav2Lip 尚未套用嘴周柔和融合修正。請重新執行 "
@@ -150,34 +151,36 @@ def _friendly_failure(output: str) -> str:
 
 
 def generate_lip_sync(
-    image_path: str,
+    source_path: str,
     audio_path: str,
     output_path: str,
     device: str,
     low_vram: bool = False,
     face_box: tuple[int, int, int, int] | None = None,
     soft_blend: bool = False,
+    static: bool = True,
 ) -> str:
-    """Run Wav2Lip for a still image and normalized audio, returning an MP4 path.
+    """Run Wav2Lip for a portrait image or video plus normalized audio.
 
-    Wav2Lip itself is kept as an external checkout. Set ``WAV2LIP_DIR`` to its
-    repository directory and optionally ``WAV2LIP_CHECKPOINT`` to a checkpoint.
-    ``face_box`` uses Wav2Lip's (top, bottom, left, right) order. A temporary
-    output is used so failed inference does not destroy an existing file.
+    ``static=True`` keeps the historic still-photo behavior. For video inputs set
+    ``static=False`` so upstream Wav2Lip uses each source frame and loops frames
+    when the generated speech is longer than the source clip.
     """
-    image = Path(image_path).expanduser().resolve()
+    source = Path(source_path).expanduser().resolve()
     audio = Path(audio_path).expanduser().resolve()
     destination = Path(output_path).expanduser().resolve()
     face_box = _validate_face_box(face_box)
 
-    if not _nonempty_file(image):
-        raise ValueError("找不到人物照片或檔案為空白。")
+    if not _nonempty_file(source):
+        raise ValueError("找不到人物照片或影片，或檔案為空白。")
     if not _nonempty_file(audio):
         raise ValueError("找不到輸入音訊或檔案為空白。")
-    if destination in {image, audio}:
-        raise ValueError("輸出影片不可覆蓋輸入照片或音訊。")
+    if destination in {source, audio}:
+        raise ValueError("輸出影片不可覆蓋人物素材或音訊。")
     if destination.suffix.lower() != ".mp4":
         raise ValueError("輸出影片必須使用 .mp4 副檔名。")
+    if not static and (face_box is not None or soft_blend):
+        raise ValueError("影片輸入不可套用固定人臉框或靜態嘴周柔和融合。")
 
     cuda_index = _cuda_index(device)
     wav2lip_dir, inference_script, checkpoint = _runtime_paths()
@@ -211,12 +214,13 @@ def generate_lip_sync(
         command = _build_command(
             inference_script,
             checkpoint,
-            image,
+            source,
             audio,
             temporary,
             low_vram=low_vram,
             face_box=face_box,
             soft_blend=soft_blend,
+            static=static,
         )
         try:
             # Upstream writes temp/result.avi relative to cwd: isolate every call.
