@@ -12,8 +12,24 @@ def test_setup_pins_official_musetalk_and_python310() -> None:
     assert "https://github.com/TMElyralab/MuseTalk.git" in text
     assert "0a89dec45a0192b824e3cf4daf96c239440c5ed8" in text
     assert 'uv" python install 3.10' in text or '"$UV" python install 3.10' in text
-    assert '"$UV" venv --python 3.10' in text
+    assert '"$UV" venv --python 3.10 --seed' in text
     assert ".venv-musetalk" in text
+
+
+def test_setup_repairs_unseeded_venv_and_pins_compatible_setuptools() -> None:
+    text = SETUP.read_text(encoding="utf-8")
+    assert '"$VENV/bin/python" -m pip --version' in text
+    assert 'rm -rf "$VENV"' in text
+    assert '"setuptools<82"' in text
+    assert "pkg_resources" in text
+
+
+def test_setup_reports_failed_step_and_command() -> None:
+    text = SETUP.read_text(encoding="utf-8")
+    assert "trap on_error ERR" in text
+    assert "失敗步驟" in text
+    assert "失敗指令" in text
+    assert "結束代碼" in text
 
 
 def test_setup_uses_official_recommended_torch_and_mmlab_versions() -> None:
