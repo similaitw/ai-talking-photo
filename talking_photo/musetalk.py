@@ -74,7 +74,7 @@ def _run(
     if check and result.returncode != 0:
         text = (_decode(result.stdout) + "\n" + _decode(result.stderr)).lower()
         if "out of memory" in text or ("cuda" in text and "memory" in text):
-            raise MuseTalkError("MuseTalk 1.5 顯示記憶體不足。請改用較大 Colab GPU、縮短講稿或降低人物照片解析度。")
+            raise MuseTalkError("MuseTalk 1.5 顯示記憶體不足。請改用較大 Colab GPU、縮短講稿或降低人物素材解析度。")
         raise MuseTalkError("MuseTalk 1.5 執行失敗，請確認 Colab 環境、模型與 FFmpeg 都已準備完成。")
     return result
 
@@ -141,18 +141,18 @@ def _validate_install(root: Path) -> None:
         raise MuseTalkError("MuseTalk checkout 版本與專案鎖定版本不符，請重新執行 MuseTalk Colab 設定。")
 
 
-def _write_task_config(path: Path, image: str, audio: str) -> None:
+def _write_task_config(path: Path, source: str, audio: str) -> None:
     # JSON strings are valid YAML scalars and safely escape Windows paths.
     path.write_text(
         "task_0:\n"
-        f"  video_path: {json.dumps(image, ensure_ascii=False)}\n"
+        f"  video_path: {json.dumps(source, ensure_ascii=False)}\n"
         f"  audio_path: {json.dumps(audio, ensure_ascii=False)}\n",
         encoding="utf-8",
     )
 
 
 def generate_musetalk_lip_sync(
-    image_path: str,
+    source_path: str,
     audio_path: str,
     output_path: str,
     *,
@@ -162,12 +162,12 @@ def generate_musetalk_lip_sync(
     batch_size: int = 4,
     fps: int = 25,
 ) -> str:
-    """Generate one MuseTalk 1.5 talking-photo MP4 using CUDA only."""
-    image = Path(image_path).expanduser().resolve()
+    """Generate one MuseTalk 1.5 MP4 from an image or video source using CUDA."""
+    source = Path(source_path).expanduser().resolve()
     audio = Path(audio_path).expanduser().resolve()
     destination = Path(output_path).expanduser().resolve()
-    if not image.is_file() or image.stat().st_size == 0:
-        raise ValueError("找不到可供 MuseTalk 使用的人物照片。")
+    if not source.is_file() or source.stat().st_size == 0:
+        raise ValueError("找不到可供 MuseTalk 使用的人物照片或影片。")
     if not audio.is_file() or audio.stat().st_size == 0:
         raise ValueError("找不到可供 MuseTalk 使用的語音檔。")
     if batch_size < 1:
@@ -190,9 +190,12 @@ def generate_musetalk_lip_sync(
     temporary_output: Path | None = None
     with tempfile.TemporaryDirectory(prefix=f"job-{uuid4().hex[:8]}-", dir=scratch_root) as temp_name:
         workspace = Path(temp_name)
-        local_image = workspace / "input.png"
+        # Preserve the original suffix. Upstream determines image vs video from
+        # the source path, so renaming an MP4 to input.png would break video mode.
+        suffix = source.suffix.lower() or ".bin"
+        local_source = workspace / f"input{suffix}"
         local_audio = workspace / "speech.wav"
-        shutil.copy2(image, local_image)
+        shutil.copy2(source, local_source)
         shutil.copy2(audio, local_audio)
         config = workspace / "task.yaml"
         results = workspace / "results"
@@ -200,11 +203,11 @@ def generate_musetalk_lip_sync(
         # Keep all paths passed to upstream relative to its cwd. The official
         # inference script builds some ffmpeg commands as strings, so this also
         # avoids breakage when the user's project path contains spaces.
-        rel_image = local_image.relative_to(root).as_posix()
+        rel_source = local_source.relative_to(root).as_posix()
         rel_audio = local_audio.relative_to(root).as_posix()
         rel_config = config.relative_to(root).as_posix()
         rel_results = results.relative_to(root).as_posix()
-        _write_task_config(config, rel_image, rel_audio)
+        _write_task_config(config, rel_source, rel_audio)
 
         command = [
             python,
@@ -228,10 +231,10 @@ def generate_musetalk_lip_sync(
         if result.returncode != 0 or not expected.is_file() or expected.stat().st_size == 0:
             text = (_decode(result.stdout) + "\n" + _decode(result.stderr)).lower()
             if "out of memory" in text or ("cuda" in text and "memory" in text):
-                raise MuseTalkError("MuseTalk 1.5 顯示記憶體不足。請改用較大 Colab GPU、縮短講稿或降低人物照片解析度。")
+                raise MuseTalkError("MuseTalk 1.5 顯示記憶體不足。請改用較大 Colab GPU、縮短講稿或降低人物素材解析度。")
             if "face" in text and ("detect" in text or "landmark" in text):
-                raise MuseTalkError("MuseTalk 找不到可用的人臉。請改用正面、清楚、嘴部未遮擋的照片。")
-            raise MuseTalkError("MuseTalk 1.5 沒有產生有效影片。請檢查 Colab GPU、模型與輸入照片。")
+                raise MuseTalkError("MuseTalk 找不到可用的人臉。請改用正面、清楚、嘴部未遮擋的照片或影片。")
+            raise MuseTalkError("MuseTalk 1.5 沒有產生有效影片。請檢查 Colab GPU、模型與人物素材。")
 
         fd, tmp_name = tempfile.mkstemp(
             prefix=f".{destination.stem}-", suffix=".mp4", dir=destination.parent
