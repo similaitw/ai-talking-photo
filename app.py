@@ -63,8 +63,13 @@ def generate_video(
         return None, None, f"輸入有誤：{exc}"
     except (PipelineError, TTSGenerationError, AudioNormalizationError, Wav2LipError, OSError) as exc:
         return None, None, f"影片產生失敗：{exc}"
-    mode = "CPU 備援" if result["device"] == "cpu" else "CUDA"
-    return result["audio_path"], result["video_path"], f"{VIDEO_READY}（{mode}）"
+    device_mode = "CPU 備援" if result["device"] == "cpu" else "CUDA"
+    quality_mode = result.get("quality_mode", "標準模式")
+    return (
+        result["audio_path"],
+        result["video_path"],
+        f"{VIDEO_READY}（{device_mode}／{quality_mode}）",
+    )
 
 
 def build_app() -> gr.Blocks:
