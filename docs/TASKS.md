@@ -2,7 +2,7 @@
 
 ## Current task
 
-M6.2 — GTX 1050 Low VRAM
+M6.3 — MuseTalk 1.5 High Quality Backend
 
 ## Milestones
 
@@ -19,7 +19,8 @@ M6.2 — GTX 1050 Low VRAM
 - [x] M5.1 Colab Notebook
 - [x] M5.2 Colab Documentation
 - [x] M6.1 Windows Setup
-- [ ] M6.2 GTX 1050 Low VRAM
+- [x] M6.2 GTX 1050 Low VRAM
+- [ ] M6.3 MuseTalk 1.5 High Quality Backend
 - [ ] M7 UX Polish
 
 ## Completed
@@ -122,3 +123,12 @@ M6.2 — GTX 1050 Low VRAM
 - 新增 6 項 Windows setup 測試，涵蓋路徑無關、固定版本、重跑安全性、繁中提示與 PowerShell AST 語法解析。
 - GitHub Actions：95 passed、3 skipped。
 - Windows 實機驗證：`H:\AI_Project\ai-talking-photo` 的 Python 3.11 `.venv` 可成功啟動 Gradio；因本機 7860 已被占用，Gradio 自動改用 `http://127.0.0.1:7861`，屬正常行為。
+
+### M6.2 — GTX 1050 Low VRAM
+- 針對 NVIDIA GTX 1050 2GB 實作低顯示記憶體清晰模式：不再把整張照片固定縮成 512 px，輸出最長邊提高至 1280 px。
+- 低顯存模式先用 512 px 預覽做一次 CPU 人臉定位，再把座標映射回較高解析度照片，以固定臉框跳過 Wav2Lip 的 GPU 人臉偵測；若定位失敗則回到相容模式。
+- Wav2Lip wrapper 支援固定臉框與嘴周柔和融合；相容性修正可重複套用，不需重新下載模型。
+- 影片封裝採 H.264 CRF 18，降低二次壓縮造成的模糊。
+- GitHub Actions：106 passed、3 skipped。
+- Windows GTX 1050 2GB 實機可成功產生影片；清晰度路徑已改善原先整體模糊問題，但同一張人物照片實測嘴型仍明顯不自然。
+- 結論：2GB 顯存與 Wav2Lip 路線保留為「快速／低顯存」模式，不再投入更多參數微調；高品質嘴型改由 M6.3 MuseTalk 1.5 在 Colab／較大顯存 GPU 路線處理。
