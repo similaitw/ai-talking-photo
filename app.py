@@ -39,7 +39,7 @@ def generate_audio_preview(
     voice: str,
     rate: float,
 ) -> tuple[str | None, str]:
-    """Generate a Taiwan Mandarin TTS preview without requiring a portrait."""
+    """Generate a Taiwan Mandarin TTS preview without requiring portrait media."""
 
     try:
         normalized_script = validate_script(script)
@@ -61,7 +61,7 @@ def generate_audio_preview(
 
 
 def generate_video(
-    image: str | None,
+    media: str | None,
     script: str,
     voice: str,
     rate: float,
@@ -73,7 +73,7 @@ def generate_video(
 
     try:
         result = generate_talking_video(
-            image,
+            media,
             script,
             voice,
             float(rate),
@@ -97,10 +97,11 @@ def generate_video(
     backend_mode = result.get("backend", BACKEND_WAV2LIP)
     quality_mode = result.get("quality_mode", "標準模式")
     enhancement_mode = result.get("enhancement_mode", "未啟用")
+    source_type = result.get("source_type", "照片")
     return (
         result["audio_path"],
         result["video_path"],
-        f"{VIDEO_READY}（{device_mode}／{backend_mode}／{quality_mode}／{enhancement_mode}）",
+        f"{VIDEO_READY}（{source_type}／{device_mode}／{backend_mode}／{quality_mode}／{enhancement_mode}）",
     )
 
 
@@ -110,13 +111,17 @@ def build_app() -> gr.Blocks:
     with gr.Blocks(title=APP_NAME) as demo:
         gr.Markdown(
             "# AI Talking Photo\n"
-            "單張照片 + 中文講稿 → AI 說話影片\n\n"
-            "建議使用正面、清楚、嘴部未遮擋的人像照片。"
+            "人物照片或影片 + 中文講稿 → AI 說話影片\n\n"
+            "建議使用正面、清楚、嘴部未遮擋的人像。影片若有自然眨眼、微點頭或呼吸感，成品通常比單張照片更自然。"
         )
 
         with gr.Row():
             with gr.Column():
-                portrait = gr.Image(type="filepath", label="人物照片")
+                portrait_media = gr.File(
+                    type="filepath",
+                    file_types=["image", "video"],
+                    label="人物素材（照片或影片）",
+                )
                 script = gr.Textbox(
                     label="講稿",
                     lines=12,
@@ -138,7 +143,7 @@ def build_app() -> gr.Blocks:
                     choices=list(BACKEND_OPTIONS),
                     value=_default_backend(),
                     label="嘴型引擎",
-                    info="GTX 1050 2GB 請用 Wav2Lip；MuseTalk 1.5 高品質模式建議使用 Google Colab GPU。",
+                    info="影片輸入可保留原本眨眼與頭部動作。GTX 1050 2GB 請用 Wav2Lip；MuseTalk 1.5 建議 Google Colab GPU。",
                 )
                 enhancement = gr.Dropdown(
                     choices=list(ENHANCEMENT_OPTIONS),
@@ -147,6 +152,7 @@ def build_app() -> gr.Blocks:
                     info="GFPGAN 可提高臉部清晰度，但不會重新計算嘴型同步。",
                 )
                 gr.Markdown(
+                    "**影片輸入**：原影片聲音會由 Edge TTS 取代；短影片可由嘴型引擎循環幀以配合較長講稿。  \n"
                     "**Wav2Lip**：速度快、GTX 1050 2GB 可用。  \n"
                     "**MuseTalk 1.5**：嘴型自然度優先，至少需 4GB 顯示記憶體，本專案建議 Colab。  \n"
                     "**GFPGAN 高清修復（實驗）**：只做臉部清晰度後處理，不取代嘴型引擎。"
@@ -174,7 +180,7 @@ def build_app() -> gr.Blocks:
             fn=generate_video,
             # Preserve the existing enhancement positional argument and add the
             # backend after it; visual component order remains independent.
-            inputs=[portrait, script, voice, rate, enhancement, backend],
+            inputs=[portrait_media, script, voice, rate, enhancement, backend],
             outputs=[audio, video, status],
             concurrency_limit=1,
         )
