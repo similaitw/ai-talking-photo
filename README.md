@@ -83,7 +83,38 @@ git pull --ff-only origin main
 
 `prepare_wav2lip.py` 的嘴周融合修正可重複執行，不會重複插入程式碼。模型仍是同一份官方 Wav2Lip GAN 權重，沒有換模型或重新訓練。
 
-> Wav2Lip 本身仍以 96×96 臉部模型輸入進行嘴型生成，因此新版可以明顯改善「整體影片被縮糊」與「整塊臉被替換」的問題，但不能完全消除 Wav2Lip 模型本身的嘴型與細節上限。若追求更自然的嘴型，後續可加入較新的高品質 backend。
+> Wav2Lip 本身仍以 96×96 臉部模型輸入進行嘴型生成，因此新版可以明顯改善「整體影片被縮糊」與「整塊臉被替換」的問題，但不能完全消除 Wav2Lip 模型本身的嘴型與細節上限。
+
+## GFPGAN 高清修復（M6.3，實驗）
+
+GFPGAN 是 **Wav2Lip 之後的臉部修復**，用途是改善臉部與嘴周的模糊感；它不會重新計算 lip-sync，因此如果 Wav2Lip 的嘴型時序或形狀本身不自然，GFPGAN 只能修復畫質，不能保證修正嘴型。
+
+為避免污染已驗證成功的 Wav2Lip `.venv`，GFPGAN 使用獨立 `.venv-gfpgan`。Windows 第一次使用請執行：
+
+```powershell
+cd H:\AI_Project\ai-talking-photo
+git pull --ff-only origin main
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_gfpgan.ps1
+```
+
+腳本會固定官方 `TencentARC/GFPGAN` commit `7552a7791caad982045a7bbe5634bbf1cd5c8679`，建立 Python 3.11 的 `.venv-gfpgan`，安裝 PyTorch 2.1.2 + torchvision 0.16.2（CUDA 11.8），並下載官方 GFPGAN V1.3 權重。GFPGAN 原始碼、虛擬環境與權重都不會 commit 到本 repository。
+
+安裝完成後仍用原本的 `.venv` 啟動主程式：
+
+```powershell
+.\.venv\Scripts\python app.py
+```
+
+在 Gradio 將「畫質後處理」選成 **GFPGAN 高清修復（實驗）**。GTX 1050 2GB 預設設定：
+
+- GFPGAN V1.3：官方描述偏向較自然的修復結果。
+- `upscale=1`：維持原影片尺寸，不做 2× 放大。
+- `only_center_face`：只修主要人物臉部。
+- `bg_upsampler=none`：不啟用 Real-ESRGAN 背景放大，降低 2GB VRAM 壓力。
+- `weight=0.4`：降低過度重建造成的身份改變風險。
+- 先拆幀修復，再以原幀率重新合成 H.264/AAC MP4 並保留音訊。
+
+官方 GFPGAN：<https://github.com/TencentARC/GFPGAN>，採 Apache License 2.0。GFPGAN V1.3 官方也提醒可能有輕微 identity change，因此本專案預設採較保守的修復強度。
 
 ## 目前可用功能
 
@@ -99,6 +130,7 @@ git pull --ff-only origin main
 - Wav2Lip subprocess wrapper：支援 CPU、CUDA、固定臉框與低顯示記憶體參數
 - 真實端到端流程：Edge TTS → FFmpeg → Wav2Lip → H.264／AAC MP4
 - GTX 1050 低顯存清晰模式與 512 px 安全 fallback
+- 可選 GFPGAN V1.3 中心人臉高清後處理
 - Google Colab Run All notebook
 - 可重複執行的 Windows 設定腳本
 
@@ -172,7 +204,7 @@ Remove-Item Env:TALKING_PHOTO_DEVICE
 .\.venv\Scripts\python -m pytest
 ```
 
-請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。2026-09-10 已在 GTX 1050 2GB／CUDA／`low_vram=True` 真實產出 **7.872 秒**影片，另以真實 Gradio 操作成功產出 **8.32 秒**影片。M6.2 清晰模式仍需用同一張實機照片做 A/B 品質驗收後才標記完成。
+請自行準備非私人人像，或指定有權使用的圖片；測試圖片與產物不納入 Git。2026-09-10 已在 GTX 1050 2GB／CUDA／`low_vram=True` 真實產出 **7.872 秒**影片，另以真實 Gradio 操作成功產出 **8.32 秒**影片。M6.2 清晰路徑已完成實機驗證；GFPGAN M6.3 仍需用同一張照片做 A/B 品質驗收。
 
 ## 安全與隱私
 
