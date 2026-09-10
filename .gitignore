@@ -10,6 +10,7 @@ temp/*
 !temp/.gitkeep
 output/*
 !output/.gitkeep
+vendor/Wav2Lip/
 *.mp4
 *.wav
 *.mp3

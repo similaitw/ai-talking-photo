@@ -2,7 +2,7 @@
 
 ## Current task
 
-M4.1 — Wav2Lip Wrapper
+M4.2 — End-to-End Talking Photo
 
 ## Milestones
 
@@ -14,7 +14,7 @@ M4.1 — Wav2Lip Wrapper
 - [x] M2.2 Audio Preview
 - [x] M3.1 FFmpeg Audio Normalize
 - [x] M3.2 Doctor
-- [ ] M4.1 Wav2Lip Wrapper
+- [x] M4.1 Wav2Lip Wrapper
 - [ ] M4.2 End-to-End Talking Photo
 - [ ] M5.1 Colab Notebook
 - [ ] M5.2 Colab Documentation
@@ -76,3 +76,13 @@ M4.1 — Wav2Lip Wrapper
 - README 補充使用方式、預設模型路徑、硬體建議與基本檢查的限制。
 - 新增 17 項測試，涵蓋 CPU、2GB／2.5GB／12GB GPU、PyTorch／CUDA 錯誤、FFmpeg 失敗與逾時、模型缺漏及跨工作目錄執行。
 - 完整測試 `python -m pytest`：60 passed，無略過；實機診斷正確回報目前缺少 PyTorch 與模型檔，FFmpeg 與 edge-tts 可使用。
+
+### M4.1 — Wav2Lip Wrapper
+- 新增 `generate_lip_sync(image_path, audio_path, output_path, device, low_vram=False)`，以 subprocess 呼叫外部 Wav2Lip `inference.py`，不把第三方原始碼或 checkpoint 提交進本 repository。
+- 預設使用 `vendor/Wav2Lip` 與 `models/wav2lip_gan.pth`，亦可透過 `WAV2LIP_DIR`、`WAV2LIP_CHECKPOINT` 自訂。
+- 支援 `cpu`、`cuda`、`cuda:N`；CPU 模式隱藏 CUDA，CUDA 模式先確認裝置可用，並拒絕 Wav2Lip 靜默改用 CPU。
+- GTX 1050 類低顯示記憶體模式使用 `face_det_batch_size=1`、`wav2lip_batch_size=1`、`resize_factor=2`。
+- CUDA OOM、人臉偵測失敗、模型／inference.py 缺漏與空白 MP4 都會回傳繁體中文錯誤；CUDA OOM 不會自動 fallback 至 CPU。
+- 推論先寫入暫存 MP4，成功後才原子取代正式輸出，失敗時保留既有影片並清除暫存檔。
+- 新增 16 項 wrapper focused tests；不下載模型、不執行 GPU inference。
+- README 補充 Wav2Lip 外部安裝方式、環境變數、低顯示記憶體行為與第三方非商業使用限制。
