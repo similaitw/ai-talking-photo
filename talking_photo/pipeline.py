@@ -13,6 +13,7 @@ from PIL import Image, ImageOps
 
 from talking_photo.config import TEMP_DIR, OUTPUT_DIR
 from talking_photo.device import get_device_info
+from talking_photo.gfpgan import enhance_video_with_gfpgan
 from talking_photo.media import normalize_audio
 from talking_photo.quality import detect_face_box, limit_low_vram_output
 from talking_photo.tts import synthesize_speech, resolve_voice, format_edge_rate
@@ -22,6 +23,11 @@ from talking_photo.wav2lip import generate_lip_sync
 
 class PipelineError(RuntimeError):
     """A stage failed without a usable final video."""
+
+
+ENHANCEMENT_NONE = "關閉（較快）"
+ENHANCEMENT_GFPGAN = "GFPGAN 高清修復（實驗）"
+ENHANCEMENT_OPTIONS = (ENHANCEMENT_NONE, ENHANCEMENT_GFPGAN)
 
 
 def finalize_video(source: Path, destination: Path) -> None:
@@ -46,19 +52,23 @@ def generate_talking_video(
     text: str,
     voice: str,
     rate: float,
+    enhancement: str = ENHANCEMENT_NONE,
     progress_callback: Callable[[float, str], None] | None = None,
 ) -> dict:
     """Return paths and runtime metadata for one talking-photo job.
 
     Low-VRAM CUDA first keeps the portrait up to 1280 px and detects a face on a
     512 px CPU preview. When that succeeds, the mapped fixed box avoids GPU face
-    detection on the large frame and enables lower-face soft blending. If the
-    preview detector cannot find a face, the pipeline falls back to the proven
-    512 px compatibility path instead of risking a GTX 1050 OOM.
+    detection on the large frame and enables lower-face soft blending. GFPGAN
+    can optionally restore the center face after Wav2Lip while keeping the same
+    video dimensions and audio.
     """
     def report(value: float, message: str) -> None:
         if progress_callback is not None:
             progress_callback(value, message)
+
+    if enhancement not in ENHANCEMENT_OPTIONS:
+        raise ValueError("不支援的畫質後處理模式。")
 
     report(0, "正在驗證照片與講稿。")
     image, script = validate_inputs(image_path, text)
@@ -80,6 +90,7 @@ def generate_talking_video(
     quality_mode = "標準模式"
     source_size: tuple[int, int] | None = None
     prepared_size: tuple[int, int] | None = None
+    enhancement_mode = "未啟用"
     try:
         job.mkdir(parents=True)
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -121,13 +132,21 @@ def generate_talking_video(
             face_box=face_box,
             soft_blend=bool(low_vram and face_box is not None),
         )
-        report(0.9, "正在以高品質 H.264 封裝可播放的 MP4。")
+        report(0.82, "正在以高品質 H.264 封裝可播放的 MP4。")
         final = job / "final.mp4"
         finalize_video(Path(raw), final)
+
+        if enhancement == ENHANCEMENT_GFPGAN:
+            report(0.88, "正在用 GFPGAN V1.3 修復中心人臉；GTX 1050 會使用 1× 低顯存設定。")
+            enhanced = job / "enhanced.mp4"
+            enhance_video_with_gfpgan(str(final), str(enhanced), version="1.3", weight=0.4)
+            os.replace(enhanced, final)
+            enhancement_mode = "GFPGAN V1.3 高清修復"
+
         os.replace(final, destination)
         for intermediate in (prepared, job / "speech.wav", job / "raw.mp4"):
             intermediate.unlink(missing_ok=True)
-        report(1, f"影片已產生（{quality_mode}），可播放語音與影片。")
+        report(1, f"影片已產生（{quality_mode}／{enhancement_mode}），可播放語音與影片。")
         return dict(
             job_id=job_id,
             audio_path=audio,
@@ -136,6 +155,7 @@ def generate_talking_video(
             gpu_name=info.gpu_name,
             low_vram=low_vram,
             quality_mode=quality_mode,
+            enhancement_mode=enhancement_mode,
             source_size=source_size,
             prepared_size=prepared_size,
             face_box=face_box,
