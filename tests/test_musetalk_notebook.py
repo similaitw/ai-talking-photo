@@ -30,7 +30,7 @@ def test_musetalk_notebook_run_all_bootstraps_isolated_environments() -> None:
     assert "origin/main" in text
     assert "uv" in text and "3.11" in text and ".colab-venv" in text
     assert "torch==2.5.1" in text
-    assert "scripts/setup_musetalk_colab.sh" in text
+    assert "setup_musetalk_colab.sh" in text
     assert ".venv-musetalk" in text
 
 
@@ -42,21 +42,25 @@ def test_musetalk_notebook_surfaces_setup_log_on_failure() -> None:
     assert "RuntimeError" in text
 
 
-def test_musetalk_notebook_launches_share_ui_with_musetalk_default() -> None:
+def test_musetalk_notebook_launches_background_colab_proxy_with_musetalk_default() -> None:
     text = _text(_load())
     assert "TALKING_PHOTO_DEFAULT_BACKEND" in text
     assert "musetalk" in text
-    assert "build_app().launch(share=True)" in text
-    assert "GFPGAN" in text and "關閉" in text
+    assert "subprocess.Popen" in text
+    assert '"-u"' in text
+    assert "share=False" in text
+    assert "google.colab.kernel.proxyPort" in text
+    assert "7865" in text
+    assert "90 秒" in text
+    assert "musetalk_gradio.log" in text
 
 
-def test_musetalk_notebook_warns_about_gpu_and_public_share_privacy() -> None:
+def test_musetalk_notebook_warns_about_gpu_and_requires_no_manual_code_editing() -> None:
     text = _text(_load())
     assert "nvidia-smi" in text
-    assert "至少 4GB" in text
-    assert "GTX 1050 2GB" in text
-    assert "gradio.live" in text
-    assert "敏感" in text
+    assert "GPU" in text
+    assert "不需要修改程式碼" in text
+    assert "Colab 專屬開啟網址" in text
 
 
 def test_musetalk_notebook_contains_no_embedded_secrets() -> None:
