@@ -25,6 +25,14 @@ def test_setup_uses_openmim_compatible_packaging_tools() -> None:
     assert "最後 120 行" in text
 
 
+def test_setup_verifies_packaging_versions_without_importing_setuptools() -> None:
+    text = SETUP.read_text(encoding="utf-8")
+    assert "from importlib.metadata import version" in text
+    assert "version('pip')" in text
+    assert "version('setuptools')" in text
+    assert "import pip\nimport setuptools" not in text
+
+
 def test_setup_uses_official_recommended_torch_and_mmlab_versions() -> None:
     text = SETUP.read_text(encoding="utf-8")
     assert "torch==2.0.1" in text
