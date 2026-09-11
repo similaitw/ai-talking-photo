@@ -62,10 +62,12 @@ step "準備相容的 Python 打包工具"
 # pkg_resources。固定舊而穩定的 pip / setuptools，避免 2026 年新版工具鏈
 # 破壞 MuseTalk 官方這組 2023-era OpenMMLab 相依。
 "$PY" -m pip install "pip==24.0" "setuptools==69.5.1" wheel
+# 不直接 import pip 後再 import setuptools。uv managed Python + setuptools 的
+# distutils hack 在這個順序下可能誤判 stdlib distutils，造成 AssertionError；
+# 版本驗證改讀 distribution metadata，不載入 setuptools 本體。
 "$PY" - <<'PY'
-import pip
-import setuptools
-print(f"pip: {pip.__version__} | setuptools: {setuptools.__version__}")
+from importlib.metadata import version
+print(f"pip: {version('pip')} | setuptools: {version('setuptools')}")
 PY
 
 step "取得官方 TMElyralab/MuseTalk"
