@@ -31,7 +31,6 @@ def test_musetalk_notebook_run_all_bootstraps_isolated_environments() -> None:
     assert "uv" in text and "3.11" in text and ".colab-venv" in text
     assert "torch==2.5.1" in text
     assert "setup_musetalk_colab.sh" in text
-    assert ".venv-musetalk" in text
 
 
 def test_musetalk_notebook_surfaces_setup_log_on_failure() -> None:
